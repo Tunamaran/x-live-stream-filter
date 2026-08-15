@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         X Canlı Yayın Filtresi
 // @namespace    https://github.com/tunamaran/x-live-stream-filter
-// @version      3.3.0
-// @description  X.com (Twitter) sol menüsüne sade ve şık "Canlı Yayınlar" butonu ekler. Fotoğraf, YouTube linki ve kayıtlı video kliplerini engelleyip SADECE gerçek canlı yayınları ve Spaces odalarını sessizce listeler.
+// @version      3.4.0
+// @description  X.com (Twitter) sol menüsüne "Canlı Yayınlar" butonu ekler. filter:spaces ve filter:native_video operatörleri ile kayıtlı video, fotoğraf ve YouTube linklerini eleyip SADECE gerçek canlı yayın ve Spaces odalarını listeler.
 // @author       tunamaran
 // @match        https://x.com/*
 // @match        https://twitter.com/*
@@ -17,7 +17,7 @@
   'use strict';
 
   // ─────────────────────────────────────────────
-  // 1. Sabitler ve Ayar Yönetimi
+  // 1. Sabitler ve Arama Operatörleri
   // ─────────────────────────────────────────────
 
   const BUTTON_ID = 'data-x-live-filter';
@@ -27,12 +27,17 @@
 
   const STORAGE_SEARCH_KEY = 'x-live-filter-last-search';
 
-  /** Canlı yayın arama sorgusu kalıbı */
-  const LIVE_QUERY_PATTERN = '(CANLI OR LIVE OR "canlı yayın" OR "live stream" OR "live now" OR "yayında")';
+  /**
+   * X.com Gelişmiş Arama Operatörleri:
+   * - filter:spaces -> Doğrudan canlı ve yaklaşan X Spaces (Sesli Oda) yayınlarını getirir.
+   * - filter:native_video -> YouTube, web sitesi linkleri ve fotoğrafları sorgu aşamasında eler; sadece X'e ait native videoları getirir.
+   */
+  const LIVE_KEYWORDS = '(CANLI OR LIVE OR "canlı yayın" OR "live stream" OR "live now" OR "yayında")';
+  const LIVE_QUERY_PATTERN = `(filter:spaces OR (filter:native_video ${LIVE_KEYWORDS}))`;
 
   /** Hızlı Kategori Tanımları */
   const CATEGORIES = [
-    { name: '⚽ Futbol', query: 'fenerbahçe OR galatasaray OR beşiktaş OR trabzonspor OR "süper lig" OR "şampiyonlar ligi"' },
+    { name: '⚽ Futbol', query: 'fenerbahçe OR galatasaray OR beşiktaş OR trabzonspor OR "süper lig"' },
     { name: '🏀 Basketbol', query: 'nba OR euroleague OR "anadolu efes" OR "fenerbahçe beko"' },
     { name: '🎮 Gaming', query: 'twitch OR kick OR valorant OR "league of legends" OR cs2 OR gta' },
     { name: '📰 Gündem', query: 'haber OR sondakika OR gündem OR deprem' },
@@ -41,10 +46,20 @@
   ];
 
   // ─────────────────────────────────────────────
-  // 2. Arama URL Oluşturucu
+  // 2. Akıllı Arama URL Oluşturucu (Search Query Builder)
   // ─────────────────────────────────────────────
 
-  const buildSearchURL = (rawKeyword, tab = 'live') => {
+  /**
+   * Kullanıcının girdiği kelimeleri X'in resmi gelişmiş arama operatörleriyle birleştirir.
+   *
+   * Örnek: "fenerbahçe" -> (fenerbahçe) (filter:spaces OR (filter:native_video (CANLI OR LIVE...)))
+   *
+   * @param {string} rawKeyword
+   * @param {string} mode - 'all' (Hepsi), 'spaces' (Sadece Sesli Oda), 'video' (Sadece Video)
+   * @param {string} tab - 'live' (En Güncel / Latest)
+   * @returns {string}
+   */
+  const buildSearchURL = (rawKeyword, mode = 'all', tab = 'live') => {
     let clean = rawKeyword.trim();
     if (!clean) clean = 'canlı yayın';
 
@@ -56,7 +71,14 @@
       topicPart = `(${clean})`;
     }
 
-    const fullQuery = `${topicPart} ${LIVE_QUERY_PATTERN}`;
+    let filterClause = LIVE_QUERY_PATTERN;
+    if (mode === 'spaces') {
+      filterClause = 'filter:spaces';
+    } else if (mode === 'video') {
+      filterClause = `(filter:native_video ${LIVE_KEYWORDS})`;
+    }
+
+    const fullQuery = `${topicPart} ${filterClause}`;
     const encoded = encodeURIComponent(fullQuery);
     return `/search?q=${encoded}&src=typed_query&f=${tab}`;
   };
@@ -124,15 +146,11 @@
   };
 
   // ─────────────────────────────────────────────
-  // 4. Kesin Canlı Yayın Filtre Motoru (v3.3.0)
+  // 4. Kesin Canlı Yayın Filtre Motoru (DOM Parser)
   // ─────────────────────────────────────────────
 
   /**
    * Bir tweet'in GERÇEK bir canlı yayın veya Spaces odası olup olmadığını kesin olarak doğrular.
-   * - Resim/Fotoğraf içeren tweet'leri KESİNLİKLE eler.
-   * - Dış bağlantı (YouTube linki, web sitesi vb.) içeren tweet'leri KESİNLİKLE eler.
-   * - Kayıtlı video kliplerini (0:13 gibi süresi olanlar) KESİNLİKLE eler.
-   * - Yalnızca X üzerinde aktif oynatılan Canlı Yayınları ve Spaces odalarını kabul eder.
    *
    * @param {HTMLElement} tweetEl
    * @returns {boolean}
@@ -154,17 +172,16 @@
     }
 
     // 3. VİDEO OYNATICI VARLIĞI KONTROLÜ
-    // Tweet'te doğrudan bir video oynatıcı yoksa (fotoğraf, YouTube link kartı veya salt metin ise) KESİNLİKLE CANLI DEĞİLDİR!
+    // Tweet'te doğrudan video oynatıcı yoksa (yani fotoğraf, YouTube linki veya düz metin ise) KESİNLİKLE ELENİR!
     const videoEl = tweetEl.querySelector('video');
     const videoContainer = tweetEl.querySelector('[data-testid="videoPlayer"]') ||
                            tweetEl.querySelector('[data-testid="videoComponent"]');
 
     if (!videoEl && !videoContainer) {
-      // Video oynatıcı yok -> Fotoğraf, YouTube linki veya metin -> KESİNLİKLE ELENİR!
       return false;
     }
 
-    const playerContainer = videoContainer || videoEl.closest('[data-testid="tweetPhoto"]') || videoEl.parentElement;
+    const playerContainer = videoContainer || (videoEl ? videoEl.parentElement : null);
     if (!playerContainer) {
       return false;
     }
@@ -176,7 +193,6 @@
     for (const node of allTextNodes) {
       if (node.children.length === 0) {
         const text = node.textContent.trim();
-        // 0:13, 01:45, 1:20:30 gibi timecode
         if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(text)) {
           // Süre bulundu -> Bu kayıtlı bir video klibidir -> KESİNLİKLE ELENİR!
           return false;
@@ -184,7 +200,6 @@
       }
     }
 
-    // Aria-label duration kontrolü (örn: aria-label="0:13")
     const durationAria = playerContainer.querySelector('[aria-label*="duration"], [aria-label*="Süre"], [aria-label*="süre"]');
     if (durationAria) {
       const val = durationAria.getAttribute('aria-label') || '';
@@ -227,7 +242,6 @@
       return true;
     }
 
-    // Yukarıdaki şartları sağlamıyorsa canlı yayın değildir
     return false;
   };
 
@@ -265,9 +279,8 @@
   const isOurSearchPage = () => {
     const url = window.location.href;
     return url.includes('/search') && (
-      url.includes('CANLI') || url.includes('LIVE') ||
-      url.includes('canl%C4%B1') || url.includes('live') ||
-      url.includes('yay%C4%B1n')
+      url.includes('filter%3Aspaces') || url.includes('filter%3Anative_video') ||
+      url.includes('CANLI') || url.includes('LIVE') || url.includes('spaces')
     );
   };
 
@@ -323,7 +336,7 @@
   };
 
   // ─────────────────────────────────────────────
-  // 8. Sade Arama Popup UI
+  // 8. Sade Arama Popup UI (v3.4.0)
   // ─────────────────────────────────────────────
 
   const injectPopupStyles = () => {
@@ -337,7 +350,7 @@
         animation: xlf-fadeIn 0.15s ease-out;
       }
       .xlf-card {
-        width: 440px; max-width: 92vw; max-height: 85vh; overflow-y: auto;
+        width: 460px; max-width: 92vw; max-height: 85vh; overflow-y: auto;
         border-radius: 16px; padding: 22px; box-shadow: 0 8px 30px rgba(0,0,0,0.35);
         animation: xlf-slideUp 0.18s ease-out; box-sizing: border-box;
       }
@@ -368,8 +381,8 @@
       .xlf-category-chip:hover { transform: translateY(-1px); }
       .xlf-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
       .xlf-tab {
-        flex: 1; padding: 8px 12px; border-radius: 9999px; border: 1px solid;
-        cursor: pointer; font-size: 13px; font-weight: 600;
+        flex: 1; padding: 8px 10px; border-radius: 9999px; border: 1px solid;
+        cursor: pointer; font-size: 12px; font-weight: 600;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         transition: all 0.2s; text-align: center;
       }
@@ -433,7 +446,7 @@
     const title = document.createElement('div');
     title.className = 'xlf-title';
     title.style.color = colors.text;
-    title.innerHTML = '<span style="color: #E0245E; font-size: 12px;">🔴</span> Canlı Yayın Ara';
+    title.innerHTML = '<span style="color: #E0245E; font-size: 12px;">🔴</span> Canlı Yayın & Spaces Ara';
 
     const closeBtn = document.createElement('button');
     closeBtn.className = 'xlf-close';
@@ -473,12 +486,12 @@
       catContainer.appendChild(chip);
     });
 
-    // Sekmeler
-    let selectedTab = 'live';
+    // Mod Seçimi (Tümü / Sadece Video / Sadece Spaces)
+    let selectedMode = 'all';
     const tabs = document.createElement('div');
     tabs.className = 'xlf-tabs';
 
-    const createTab = (label, value, isActive = false) => {
+    const createTab = (label, modeValue, isActive = false) => {
       const tab = document.createElement('button');
       tab.className = `xlf-tab ${isActive ? 'active' : ''}`;
       tab.textContent = label;
@@ -491,7 +504,7 @@
       update(isActive);
 
       tab.addEventListener('click', () => {
-        selectedTab = value;
+        selectedMode = modeValue;
         tabs.querySelectorAll('.xlf-tab').forEach(t => {
           const isThis = t === tab;
           t.className = `xlf-tab ${isThis ? 'active' : ''}`;
@@ -506,8 +519,9 @@
       return tab;
     };
 
-    tabs.appendChild(createTab('📋 Güncel', 'live', true));
-    tabs.appendChild(createTab('🎥 Videolar', 'video'));
+    tabs.appendChild(createTab('🔥 Tümü (Video + Spaces)', 'all', true));
+    tabs.appendChild(createTab('🎥 Sadece Canlı Video', 'video'));
+    tabs.appendChild(createTab('🎙️ Sadece Spaces', 'spaces'));
 
     // Arama Butonu
     const searchBtn = document.createElement('button');
@@ -526,7 +540,7 @@
       if (!keyword) return;
       saveRecentSearch(keyword);
       closePopup();
-      window.location.href = buildSearchURL(keyword, selectedTab);
+      window.location.href = buildSearchURL(keyword, selectedMode, 'live');
     };
 
     input.addEventListener('keydown', (e) => {
@@ -762,7 +776,7 @@
   // ─────────────────────────────────────────────
 
   const init = () => {
-    console.log('[X Canlı Yayın Filtresi] 🚀 v3.3.0 başlatılıyor...');
+    console.log('[X Canlı Yayın Filtresi] 🚀 v3.4.0 başlatılıyor...');
 
     interceptSPANavigation();
     injectLiveButton();
