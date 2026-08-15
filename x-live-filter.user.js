@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         X Canlı Yayın Filtresi
 // @namespace    https://github.com/tunamaran/x-live-stream-filter
-// @version      3.1.0
-// @description  X.com (Twitter) sol menüsüne "Canlı Yayınlar" butonu ekler. Kayıtlı video ve gol kliplerini engelleyip SADECE gerçek canlı yayın ve Spaces odalarını gösterir.
+// @version      3.2.0
+// @description  X.com (Twitter) sol menüsüne sade ve şık "Canlı Yayınlar" butonu ekler. Kayıtlı video kliplerini engelleyip SADECE gerçek canlı yayınları ve Spaces odalarını sessizce ve temizce listeler.
 // @author       tunamaran
 // @match        https://x.com/*
 // @match        https://twitter.com/*
@@ -23,13 +23,12 @@
   const BUTTON_ID = 'data-x-live-filter';
   const POPUP_ID = 'data-x-live-popup';
   const FILTERED_ATTR = 'data-xlf-checked';
-  const LIVE_CARD_ATTR = 'data-xlf-live-card';
-  const THROTTLE_MS = 350;
+  const THROTTLE_MS = 300;
 
   const STORAGE_SEARCH_KEY = 'x-live-filter-last-search';
   const STORAGE_SETTINGS_KEY = 'x-live-filter-settings';
 
-  /** Canlı yayın anahtar kelime sorgu kalıbı */
+  /** Canlı yayın arama sorgusu kalıbı */
   const LIVE_QUERY_PATTERN = '(CANLI OR LIVE OR "canlı yayın" OR "live stream" OR "live now" OR "yayında")';
 
   /** Hızlı Kategori Tanımları */
@@ -38,18 +37,15 @@
     { name: '🏀 Basketbol', query: 'nba OR euroleague OR "anadolu efes" OR "fenerbahçe beko"' },
     { name: '🎮 Gaming', query: 'twitch OR kick OR valorant OR "league of legends" OR cs2 OR gta' },
     { name: '📰 Gündem', query: 'haber OR sondakika OR gündem OR deprem' },
-    { name: '🎵 Müzik', query: 'konser OR akustik OR "canlı performans" OR dj OR müzik' },
-    { name: '🎙️ Spaces', query: 'spaces OR "sesli oda" OR "x spaces" OR "audio space"' }
+    { name: '🎵 Müzik', query: 'konser OR akustik OR "canlı performans" OR dj' },
+    { name: '🎙️ Spaces', query: 'spaces OR "sesli oda" OR "x spaces"' }
   ];
 
-  /** Varsayılan kullanıcı ayarları */
+  /** Varsayılan ayarlar */
   const DEFAULT_SETTINGS = {
     sensitivity: 'medium',      // 'low' | 'medium' | 'high'
-    autoRefresh: 30,             // 0 (kapalı), 30, 60, 120 (saniye)
-    desktopNotifications: true,  // Bildirim izni varsa bildirim gönder
-    soundAlerts: true,           // Sesli uyarı çal (Web Audio API)
-    highlightCards: true,        // Canlı yayın tweetlerine neon/vurgu efekti ekle
-    customKeywords: ['maç izle', 'canlı izle', 'yayındayız', 'canlı maç']
+    autoRefresh: 30,             // 0 (kapalı), 30, 60 (saniye)
+    showLiveBadge: true          // Tweet üstünde sade "🔴 CANLI" etiketi göster
   };
 
   const loadSettings = () => {
@@ -72,79 +68,7 @@
   };
 
   // ─────────────────────────────────────────────
-  // 2. Web Audio API — Bildirim Sesi (Synthesizer)
-  // ─────────────────────────────────────────────
-
-  const playAlertSound = () => {
-    const settings = loadSettings();
-    if (!settings.soundAlerts) return;
-
-    try {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
-
-      const now = ctx.currentTime;
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, now);
-      osc.frequency.exponentialRampToValueAtTime(880, now + 0.12);
-
-      gain.gain.setValueAtTime(0.15, now);
-      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
-
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc.start(now);
-      osc.stop(now + 0.36);
-    } catch {
-      // Ses engeli
-    }
-  };
-
-  // ─────────────────────────────────────────────
-  // 3. Masaüstü Bildirimleri
-  // ─────────────────────────────────────────────
-
-  const requestNotificationPermission = async () => {
-    if (!('Notification' in window)) return false;
-    if (Notification.permission === 'granted') return true;
-    if (Notification.permission !== 'denied') {
-      const permission = await Notification.requestPermission();
-      return permission === 'granted';
-    }
-    return false;
-  };
-
-  const sendDesktopNotification = (title, body, onClickUrl) => {
-    const settings = loadSettings();
-    if (!settings.desktopNotifications) return;
-    if (!('Notification' in window) || Notification.permission !== 'granted') return;
-
-    try {
-      const notif = new Notification(title, {
-        body: body,
-        icon: 'https://abs.twimg.com/favicons/twitter.3.ico',
-        tag: 'x-live-stream-alert',
-        renotify: true
-      });
-
-      if (onClickUrl) {
-        notif.onclick = () => {
-          window.focus();
-          notif.close();
-        };
-      }
-    } catch {
-      // Ignore
-    }
-  };
-
-  // ─────────────────────────────────────────────
-  // 4. Arama URL Oluşturucu
+  // 2. Arama URL Oluşturucu
   // ─────────────────────────────────────────────
 
   const buildSearchURL = (rawKeyword, tab = 'live') => {
@@ -165,7 +89,7 @@
   };
 
   // ─────────────────────────────────────────────
-  // 5. SVG İkonlar & Tema Renkleri
+  // 3. SVG İkonlar & Tema Renkleri
   // ─────────────────────────────────────────────
 
   const getLiveIcon = () => {
@@ -178,9 +102,7 @@
     svg.innerHTML = `
       <g>
         <path d="M16 6H4c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-2.5l4 3V9.5l-4 3V8c0-1.1-.9-2-2-2z"/>
-        <circle cx="5" cy="9" r="1.5" fill="#E0245E">
-          <animate attributeName="opacity" values="1;0.2;1" dur="1.2s" repeatCount="indefinite"/>
-        </circle>
+        <circle cx="5" cy="9" r="1.5" fill="#E0245E" />
       </g>
     `;
     return svg;
@@ -207,7 +129,7 @@
           textSecondary: '#71767B', inputBg: '#202327', accent: '#1D9BF0',
           accentHover: '#1A8CD8', overlay: 'rgba(91, 112, 131, 0.4)',
           buttonText: '#FFFFFF', hoverBg: 'rgba(239, 243, 244, 0.1)',
-          liveRed: '#F4212E', liveRedBg: 'rgba(244, 33, 46, 0.12)'
+          liveRed: '#F4212E'
         };
       case 'dim':
         return {
@@ -215,7 +137,7 @@
           textSecondary: '#8B98A5', inputBg: '#273340', accent: '#1D9BF0',
           accentHover: '#1A8CD8', overlay: 'rgba(91, 112, 131, 0.4)',
           buttonText: '#FFFFFF', hoverBg: 'rgba(247, 249, 249, 0.1)',
-          liveRed: '#F4212E', liveRedBg: 'rgba(244, 33, 46, 0.15)'
+          liveRed: '#F4212E'
         };
       default:
         return {
@@ -223,13 +145,13 @@
           textSecondary: '#536471', inputBg: '#F7F9F9', accent: '#1D9BF0',
           accentHover: '#1A8CD8', overlay: 'rgba(0, 0, 0, 0.4)',
           buttonText: '#FFFFFF', hoverBg: 'rgba(15, 20, 25, 0.1)',
-          liveRed: '#E0245E', liveRedBg: 'rgba(224, 36, 94, 0.1)'
+          liveRed: '#E0245E'
         };
     }
   };
 
   // ─────────────────────────────────────────────
-  // 6. Kesin Canlı Yayın Analiz & Puanlama Motoru (v3.1.0)
+  // 4. Kesin Canlı Yayın Analiz & Filtre Motoru
   // ─────────────────────────────────────────────
 
   /**
@@ -238,10 +160,10 @@
    *
    * @param {HTMLElement} tweetEl
    * @param {string} sensitivity - 'low' | 'medium' | 'high'
-   * @returns {{ isLive: boolean, score: number, details: string }}
+   * @returns {boolean} Gerçek canlı yayın ise true
    */
-  const evaluateTweetLiveScore = (tweetEl, sensitivity = 'medium') => {
-    // 1. Tweet metnini al (Kullanıcı adı/handle kısmını ÇIKAR - false positive önleme)
+  const isRealLiveTweet = (tweetEl, sensitivity = 'medium') => {
+    // 1. Tweet metnini al (Kullanıcı adı/handle kısmını ÇIKAR)
     const tweetTextEl = tweetEl.querySelector('[data-testid="tweetText"]');
     const tweetText = tweetTextEl ? tweetTextEl.textContent.toLowerCase() : '';
 
@@ -260,29 +182,24 @@
     // Normal videolarda sol altta "0:13", "1:45", "12:00" gibi süre badge'i bulunur.
     // Canlı yayınlarda ise video süresi YAZMAZ, yerine kırmızı "LIVE" veya izleyici sayısı yazar!
     let hasRecordedDuration = false;
-    let durationText = '';
 
     const durationBadgeCandidates = mediaContainer.querySelectorAll('div, span, time');
     for (const el of durationBadgeCandidates) {
       if (el.children.length === 0) {
         const txt = el.textContent.trim();
-        // 0:13 veya 1:45 veya 10:20 formatı
         if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(txt)) {
           hasRecordedDuration = true;
-          durationText = txt;
           break;
         }
       }
     }
 
-    // Ekstra duration kontrolü (aria-label="0:13" veya time etiketi)
     if (!hasRecordedDuration) {
       const timeEls = mediaContainer.querySelectorAll('time, [aria-label*="duration"], [aria-label*="Süre"], [aria-label*="süre"]');
       for (const tel of timeEls) {
         const aria = tel.getAttribute('aria-label') || tel.textContent || '';
         if (/\b\d{1,2}:\d{2}(:\d{2})?\b/.test(aria)) {
           hasRecordedDuration = true;
-          durationText = aria;
           break;
         }
       }
@@ -315,135 +232,90 @@
     const hasBroadcastPlayer = tweetEl.querySelector('[data-testid="broadcastPlayer"]') !== null ||
                                tweetEl.querySelector('a[href*="/i/broadcasts/"]') !== null;
 
-    // ─────────────────────────────────────────────
-    // FİLTRELEME VE KARAR VERME KURALLARI
-    // ─────────────────────────────────────────────
+    // ── KESİN KARARLAR ──
 
-    // KURAL A: Süresi olan (0:13 gibi) ve gerçek Live badge'i OLMAYAN videolar KESİNLİKLE CANLI DEĞİLDİR!
+    // Kural A: Kayıtlı video süresi (0:13) varsa ve Live badge'i yoksa -> ELENİR
     if (hasRecordedDuration && !hasRealLiveBadge) {
-      return {
-        isLive: false,
-        score: -100,
-        details: `rejected-video-duration(${durationText})`
-      };
+      return false;
     }
 
-    // KURAL B: Spaces odası veya doğrudan Broadcast Player varsa KESİNLİKLE CANLIDIR!
+    // Kural B: Spaces odası veya Broadcast player varsa -> CANLI
     if (hasAudioSpace || hasBroadcastPlayer) {
-      return {
-        isLive: true,
-        score: 95,
-        details: hasAudioSpace ? 'verified-spaces-room' : 'verified-broadcast-player'
-      };
+      return true;
     }
 
-    // KURAL C: Video üzerinde gerçek kırmızı LIVE / CANLI rozeti varsa KESİNLİKLE CANLIDIR!
+    // Kural C: Video üzerinde gerçek kırmızı LIVE rozeti varsa -> CANLI
     if (hasRealLiveBadge) {
-      return {
-        isLive: true,
-        score: 90,
-        details: 'verified-live-badge'
-      };
+      return true;
     }
 
-    // KURAL D: Tweet içerisinde hiçbir video veya kart yoksa CANLI DEĞİLDİR!
+    // Kural D: Hiçbir video veya medya kartı yoksa -> ELENİR
     const hasAnyVideo = tweetEl.querySelector('video') !== null ||
                         tweetEl.querySelector('[data-testid="videoPlayer"]') !== null ||
                         tweetEl.querySelector('[data-testid="card.wrapper"]') !== null;
 
     if (!hasAnyVideo) {
-      return {
-        isLive: false,
-        score: 0,
-        details: 'no-media'
-      };
+      return false;
     }
 
-    // KURAL E: Video var ama süresi tespit edilemedi (Stream buffer) -> Sıkı metin analizi
-    let score = 0;
-    const details = [];
-
-    // Klip / Gol / Özet kelimeleri varsa ceza ver (Kayıtlı video indikatörü)
+    // Kural E: Klip/gol/özet kelimeleri içeriyorsa -> ELENİR
     const clipIndicators = ['gol |', 'goal |', 'anlık goller', 'anlık gol', 'özet |', 'highlights', 'from @'];
     for (const ci of clipIndicators) {
       if (bodyContentText.includes(ci)) {
-        return {
-          isLive: false,
-          score: -50,
-          details: `rejected-clip-word(${ci})`
-        };
+        return false;
       }
     }
 
-    // Canlı yayın anahtar kelimeleri
+    // Kural F: Metin kontrolü (Süresiz video buffer'ları için)
+    let score = 0;
     const liveKeywords = ['canlı yayın', 'live stream', 'live now', 'yayındayız', 'canlı izle', 'canlı maç yayını'];
     for (const kw of liveKeywords) {
-      if (tweetText.includes(kw)) {
-        score += 35;
-        details.push(`kw(${kw})`);
-      }
+      if (tweetText.includes(kw)) score += 35;
     }
 
-    // İzleyici sayısı göstergesi
     if (bodyContentText.includes('viewers') || bodyContentText.includes('watching') || bodyContentText.includes('izleyici')) {
       score += 25;
-      details.push('viewers');
     }
 
-    let threshold = 40; // medium
+    let threshold = 40;
     if (sensitivity === 'high') threshold = 55;
     if (sensitivity === 'low') threshold = 25;
 
-    return {
-      isLive: score >= threshold,
-      score,
-      details: details.join(' | ') || 'fallback-check'
-    };
+    return score >= threshold;
   };
 
   // ─────────────────────────────────────────────
-  // 7. Zengin Canlı Kartlar (Card Highlighting)
+  // 5. Sade Tweet Etiketi
   // ─────────────────────────────────────────────
 
-  const enrichLiveCard = (tweetEl, evaluation) => {
+  const attachMinimalLiveTag = (tweetEl) => {
     const settings = loadSettings();
-    if (!settings.highlightCards) return;
-    if (tweetEl.getAttribute(LIVE_CARD_ATTR)) return;
+    if (!settings.showLiveBadge) return;
+    if (tweetEl.querySelector('.xlf-live-tag')) return;
 
-    tweetEl.setAttribute(LIVE_CARD_ATTR, 'true');
-    const colors = getThemeColors();
-
-    tweetEl.style.transition = 'border-left 0.2s, box-shadow 0.2s';
-    tweetEl.style.borderLeft = `4px solid ${colors.liveRed}`;
-    tweetEl.style.boxShadow = `inset 4px 0 12px -2px ${colors.liveRedBg}`;
-
-    const headerEl = tweetEl.querySelector('[data-testid="User-Name"]') || tweetEl.querySelector('div');
-    if (headerEl && !tweetEl.querySelector('.xlf-live-tag')) {
+    const headerEl = tweetEl.querySelector('[data-testid="User-Name"]');
+    if (headerEl) {
+      const colors = getThemeColors();
       const tag = document.createElement('span');
       tag.className = 'xlf-live-tag';
       tag.style.display = 'inline-flex';
       tag.style.alignItems = 'center';
-      tag.style.gap = '4px';
-      tag.style.padding = '2px 8px';
-      tag.style.marginRight = '8px';
-      tag.style.borderRadius = '9999px';
+      tag.style.padding = '1px 6px';
+      tag.style.marginRight = '6px';
+      tag.style.borderRadius = '4px';
       tag.style.backgroundColor = colors.liveRed;
       tag.style.color = '#FFFFFF';
       tag.style.fontSize = '11px';
       tag.style.fontWeight = '700';
-      tag.style.letterSpacing = '0.5px';
-      tag.innerHTML = `🔴 CANLI YAYIN <span style="opacity:0.8;font-size:9px">(${evaluation.score}p)</span>`;
+      tag.textContent = '🔴 CANLI';
 
       headerEl.parentNode?.insertBefore(tag, headerEl);
     }
   };
 
   // ─────────────────────────────────────────────
-  // 8. DOM Post-Filtresi, Sayıcı ve Bildirimler
+  // 6. DOM Post-Filtresi
   // ─────────────────────────────────────────────
-
-  let liveTweetCount = 0;
-  let previousLiveCount = 0;
 
   const isOurSearchPage = () => {
     const url = window.location.href;
@@ -454,108 +326,30 @@
     );
   };
 
-  const updateCounterBadge = () => {
-    let badge = document.querySelector('.xlf-filter-badge');
-    if (!badge) {
-      if (!isOurSearchPage()) return;
-      showFilterBadge();
-      badge = document.querySelector('.xlf-filter-badge');
-    }
-
-    if (badge) {
-      const countSpan = badge.querySelector('.xlf-count');
-      if (countSpan) {
-        countSpan.textContent = liveTweetCount;
-      }
-    }
-  };
-
   const filterTimelineTweets = () => {
     if (!isOurSearchPage()) return;
 
     const settings = loadSettings();
     const tweets = document.querySelectorAll(`article[data-testid="tweet"]:not([${FILTERED_ATTR}])`);
-    let newlyDiscoveredLive = 0;
 
     tweets.forEach((tweet) => {
       tweet.setAttribute(FILTERED_ATTR, 'true');
-      const evaluation = evaluateTweetLiveScore(tweet, settings.sensitivity);
+      const isLive = isRealLiveTweet(tweet, settings.sensitivity);
 
       const cellInner = tweet.closest('[data-testid="cellInnerDiv"]');
       const target = cellInner || tweet;
 
-      if (evaluation.isLive) {
+      if (isLive) {
         target.style.display = '';
-        enrichLiveCard(tweet, evaluation);
-        liveTweetCount++;
-        newlyDiscoveredLive++;
+        attachMinimalLiveTag(tweet);
       } else {
         target.style.display = 'none';
       }
     });
-
-    if (newlyDiscoveredLive > 0) {
-      updateCounterBadge();
-
-      if (previousLiveCount > 0 && newlyDiscoveredLive > 0) {
-        playAlertSound();
-        sendDesktopNotification(
-          '🔴 Yeni Canlı Yayın Bulundu!',
-          `${newlyDiscoveredLive} yeni canlı yayın arama sonuçlarına eklendi.`,
-          window.location.href
-        );
-        showNewLiveAlertBanner(newlyDiscoveredLive);
-      }
-      previousLiveCount = liveTweetCount;
-    }
-  };
-
-  const showNewLiveAlertBanner = (newCount) => {
-    if (document.querySelector('.xlf-new-banner')) return;
-
-    const colors = getThemeColors();
-    const banner = document.createElement('div');
-    banner.className = 'xlf-new-banner';
-    banner.style.position = 'sticky';
-    banner.style.top = '54px';
-    banner.style.zIndex = '999';
-    banner.style.backgroundColor = colors.liveRed;
-    banner.style.color = '#FFFFFF';
-    banner.style.padding = '10px 16px';
-    banner.style.borderRadius = '12px';
-    banner.style.margin = '8px 16px';
-    banner.style.display = 'flex';
-    banner.style.alignItems = 'center';
-    banner.style.justifyContent = 'space-between';
-    banner.style.boxShadow = '0 4px 16px rgba(0,0,0,0.3)';
-    banner.style.fontSize = '14px';
-    banner.style.fontWeight = '700';
-    banner.style.cursor = 'pointer';
-    banner.style.animation = 'xlf-slideUp 0.3s ease-out';
-
-    banner.innerHTML = `
-      <div style="display:flex;align-items:center;gap:8px">
-        <span>✨</span>
-        <span>${newCount} Yeni Canlı Yayın Akışa Eklendi ↑</span>
-      </div>
-      <button style="background:rgba(255,255,255,0.25);border:none;color:#fff;padding:4px 10px;border-radius:9999px;font-size:12px;cursor:pointer;font-weight:700">Yukarı Çık</button>
-    `;
-
-    banner.addEventListener('click', () => {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      banner.remove();
-    });
-
-    const primaryCol = document.querySelector('[data-testid="primaryColumn"]') || document.body;
-    primaryCol.prepend(banner);
-
-    setTimeout(() => {
-      if (banner.parentNode) banner.remove();
-    }, 8000);
   };
 
   // ─────────────────────────────────────────────
-  // 9. Otomatik Yenileme Döngüsü
+  // 7. Otomatik Yenileme
   // ─────────────────────────────────────────────
 
   let autoRefreshTimer = null;
@@ -576,6 +370,7 @@
         return;
       }
 
+      // X.com yeni tweetler hapı
       const newPostsPill = document.querySelector('[data-testid="pill-new-tweets"]') ||
                            document.querySelector('[role="button"][aria-label*="yeni"]');
       if (newPostsPill) {
@@ -584,12 +379,10 @@
 
       filterTimelineTweets();
     }, settings.autoRefresh * 1000);
-
-    console.log(`[X Canlı Yayın Filtresi] ⏱️ Otomatik yenileme aktif (${settings.autoRefresh}s).`);
   };
 
   // ─────────────────────────────────────────────
-  // 10. Arama & Ayarlar Popup UI
+  // 8. Sade Arama & Ayarlar Popup UI
   // ─────────────────────────────────────────────
 
   const injectPopupStyles = () => {
@@ -603,96 +396,57 @@
         animation: xlf-fadeIn 0.15s ease-out;
       }
       .xlf-card {
-        width: 480px; max-width: 92vw; max-height: 88vh; overflow-y: auto;
-        border-radius: 16px; padding: 24px; box-shadow: 0 12px 36px rgba(0,0,0,0.4);
-        animation: xlf-slideUp 0.2s ease-out; box-sizing: border-box;
+        width: 440px; max-width: 92vw; max-height: 85vh; overflow-y: auto;
+        border-radius: 16px; padding: 22px; box-shadow: 0 8px 30px rgba(0,0,0,0.35);
+        animation: xlf-slideUp 0.18s ease-out; box-sizing: border-box;
       }
-      .xlf-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+      .xlf-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
       .xlf-title {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        font-size: 20px; font-weight: 800; display: flex; align-items: center; gap: 8px;
+        font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px;
       }
-      .xlf-nav-tabs {
-        display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid;
-        padding-bottom: 8px;
-      }
-      .xlf-nav-tab {
-        background: transparent; border: none; font-size: 14px; font-weight: 700;
-        cursor: pointer; padding: 6px 12px; border-radius: 8px; transition: all 0.15s;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      }
-      .xlf-nav-tab.active { background: rgba(29, 155, 240, 0.15); color: #1D9BF0 !important; }
       .xlf-close {
-        width: 34px; height: 34px; border-radius: 50%; border: none; cursor: pointer;
-        display: flex; align-items: center; justify-content: center; font-size: 18px;
+        width: 32px; height: 32px; border-radius: 50%; border: none; cursor: pointer;
+        display: flex; align-items: center; justify-content: center; font-size: 16px;
         transition: background-color 0.2s; background: transparent;
       }
       .xlf-input {
-        width: 100%; padding: 12px 16px; border-radius: 12px; border: 2px solid transparent;
-        font-size: 15px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        width: 100%; padding: 11px 14px; border-radius: 10px; border: 2px solid transparent;
+        font-size: 14px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         outline: none; transition: border-color 0.2s; box-sizing: border-box; margin-bottom: 12px;
       }
       .xlf-input:focus { border-color: #1D9BF0; }
       .xlf-categories {
-        display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px;
+        display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px;
       }
       .xlf-category-chip {
-        padding: 6px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600;
+        padding: 5px 11px; border-radius: 9999px; font-size: 12px; font-weight: 600;
         cursor: pointer; border: 1px solid; transition: all 0.15s;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       }
       .xlf-category-chip:hover { transform: translateY(-1px); }
-      .xlf-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+      .xlf-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
       .xlf-tab {
-        flex: 1; padding: 10px 14px; border-radius: 9999px; border: 1px solid;
-        cursor: pointer; font-size: 13px; font-weight: 700;
+        flex: 1; padding: 8px 12px; border-radius: 9999px; border: 1px solid;
+        cursor: pointer; font-size: 13px; font-weight: 600;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         transition: all 0.2s; text-align: center;
       }
       .xlf-search-btn {
-        width: 100%; padding: 12px; border-radius: 9999px; border: none;
-        font-size: 15px; font-weight: 700;
+        width: 100%; padding: 11px; border-radius: 9999px; border: none;
+        font-size: 14px; font-weight: 700;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         cursor: pointer; transition: background-color 0.2s;
       }
       .xlf-search-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-      .xlf-setting-row {
-        display: flex; align-items: center; justify-content: space-between;
-        padding: 10px 0; border-bottom: 1px solid;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      }
-      .xlf-setting-label { font-size: 14px; font-weight: 600; }
-      .xlf-setting-desc { font-size: 12px; opacity: 0.7; margin-top: 2px; }
-      .xlf-select {
-        padding: 6px 10px; border-radius: 8px; font-size: 13px; font-weight: 600;
-        border: 1px solid; outline: none; cursor: pointer;
-      }
-      .xlf-toggle {
-        width: 44px; height: 24px; border-radius: 9999px; background: #71767B;
-        position: relative; cursor: pointer; transition: background 0.2s;
-      }
-      .xlf-toggle.on { background: #1D9BF0; }
-      .xlf-toggle-knob {
-        width: 20px; height: 20px; border-radius: 50%; background: #FFFFFF;
-        position: absolute; top: 2px; left: 2px; transition: transform 0.2s;
-      }
-      .xlf-toggle.on .xlf-toggle-knob { transform: translateX(20px); }
-      .xlf-filter-badge {
-        position: fixed; bottom: 20px; right: 20px; padding: 10px 18px; border-radius: 9999px;
-        font-size: 13px; font-weight: 700; z-index: 9999; display: flex; align-items: center;
-        gap: 8px; box-shadow: 0 6px 20px rgba(0,0,0,0.35); cursor: pointer;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        animation: xlf-slideUp 0.3s ease-out; transition: transform 0.2s, opacity 0.2s;
-      }
-      .xlf-filter-badge:hover { transform: scale(1.03); }
       .xlf-recent-item {
-        display: inline-block; padding: 4px 10px; border-radius: 9999px; font-size: 12px;
-        cursor: pointer; margin-right: 6px; margin-bottom: 6px;
+        display: inline-block; padding: 3px 9px; border-radius: 9999px; font-size: 12px;
+        cursor: pointer; margin-right: 5px; margin-bottom: 5px;
         transition: background-color 0.15s; border: 1px solid;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       }
       @keyframes xlf-fadeIn { from { opacity: 0; } to { opacity: 1; } }
-      @keyframes xlf-slideUp { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+      @keyframes xlf-slideUp { from { transform: translateY(12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
       @keyframes xlf-fadeOut { from { opacity: 1; } to { opacity: 0; } }
     `;
     document.head.appendChild(style);
@@ -710,38 +464,17 @@
       let searches = getRecentSearches();
       searches = searches.filter(s => s.toLowerCase() !== term.toLowerCase());
       searches.unshift(term);
-      searches = searches.slice(0, 6);
+      searches = searches.slice(0, 5);
       localStorage.setItem(STORAGE_SEARCH_KEY, JSON.stringify(searches));
     } catch { /* ignore */ }
   };
 
-  const showFilterBadge = () => {
-    if (document.querySelector('.xlf-filter-badge')) return;
-
-    injectPopupStyles();
-    const colors = getThemeColors();
-
-    const badge = document.createElement('div');
-    badge.className = 'xlf-filter-badge';
-    badge.style.backgroundColor = colors.liveRed;
-    badge.style.color = '#FFFFFF';
-    badge.innerHTML = `🔴 <span class="xlf-count">${liveTweetCount}</span> Canlı Yayın Aktif`;
-    badge.title = 'Tıkla: Filtreyi ve ayarları yönet';
-
-    badge.addEventListener('click', () => {
-      showSearchPopup('settings');
-    });
-
-    document.body.appendChild(badge);
-  };
-
-  const showSearchPopup = (initialTab = 'search') => {
+  const showSearchPopup = () => {
     if (document.querySelector(`[${POPUP_ID}]`)) return;
 
     injectPopupStyles();
     const colors = getThemeColors();
     const recentSearches = getRecentSearches();
-    let currentSettings = loadSettings();
 
     const overlay = document.createElement('div');
     overlay.className = 'xlf-overlay';
@@ -759,7 +492,7 @@
     const title = document.createElement('div');
     title.className = 'xlf-title';
     title.style.color = colors.text;
-    title.innerHTML = '<span style="color: #F4212E; font-size: 14px;">🔴</span> Canlı Yayın Merkezi';
+    title.innerHTML = '<span style="color: #E0245E; font-size: 12px;">🔴</span> Canlı Yayın Ara';
 
     const closeBtn = document.createElement('button');
     closeBtn.className = 'xlf-close';
@@ -770,37 +503,16 @@
     header.appendChild(title);
     header.appendChild(closeBtn);
 
-    // Nav Tabs
-    const navTabs = document.createElement('div');
-    navTabs.className = 'xlf-nav-tabs';
-    navTabs.style.borderColor = colors.border;
-
-    const searchNavTab = document.createElement('button');
-    searchNavTab.className = `xlf-nav-tab ${initialTab === 'search' ? 'active' : ''}`;
-    searchNavTab.style.color = colors.text;
-    searchNavTab.textContent = '🔍 Canlı Ara';
-
-    const settingsNavTab = document.createElement('button');
-    settingsNavTab.className = `xlf-nav-tab ${initialTab === 'settings' ? 'active' : ''}`;
-    settingsNavTab.style.color = colors.text;
-    settingsNavTab.textContent = '⚙️ Ayarlar & Filtre';
-
-    navTabs.appendChild(searchNavTab);
-    navTabs.appendChild(settingsNavTab);
-
-    const viewContainer = document.createElement('div');
-
-    // ── SEARCH VIEW ──
-    const searchView = document.createElement('div');
-
+    // Input
     const input = document.createElement('input');
     input.className = 'xlf-input';
     input.type = 'text';
-    input.placeholder = 'Konu veya kelimeler (örn: fenerbahçe, nba, konser)...';
+    input.placeholder = 'Canlı yayın konusu (örn: fenerbahçe, nba)...';
     input.style.backgroundColor = colors.inputBg;
     input.style.color = colors.text;
     if (recentSearches.length > 0) input.value = recentSearches[0];
 
+    // Hızlı Kategoriler
     const catContainer = document.createElement('div');
     catContainer.className = 'xlf-categories';
 
@@ -820,6 +532,7 @@
       catContainer.appendChild(chip);
     });
 
+    // Sekmeler
     let selectedTab = 'live';
     const tabs = document.createElement('div');
     tabs.className = 'xlf-tabs';
@@ -852,12 +565,13 @@
       return tab;
     };
 
-    tabs.appendChild(createTab('📋 Güncel (Latest)', 'live', true));
+    tabs.appendChild(createTab('📋 Güncel', 'live', true));
     tabs.appendChild(createTab('🎥 Videolar', 'video'));
 
+    // Arama Butonu
     const searchBtn = document.createElement('button');
     searchBtn.className = 'xlf-search-btn';
-    searchBtn.textContent = '🔴 Canlı Yayınları Filtrele & Ara';
+    searchBtn.textContent = 'Canlı Yayınları Bul';
     searchBtn.style.backgroundColor = colors.liveRed;
     searchBtn.style.color = '#FFFFFF';
     searchBtn.disabled = input.value.trim().length === 0;
@@ -881,17 +595,18 @@
 
     searchBtn.addEventListener('click', doSearch);
 
+    // Son aramalar
     const recentDiv = document.createElement('div');
     if (recentSearches.length > 0) {
-      recentDiv.style.marginTop = '14px';
-      recentDiv.style.paddingTop = '12px';
+      recentDiv.style.marginTop = '12px';
+      recentDiv.style.paddingTop = '10px';
       recentDiv.style.borderTop = `1px solid ${colors.border}`;
 
       const rTitle = document.createElement('div');
-      rTitle.style.fontSize = '12px';
+      rTitle.style.fontSize = '11px';
       rTitle.style.fontWeight = '700';
       rTitle.style.color = colors.textSecondary;
-      rTitle.style.marginBottom = '6px';
+      rTitle.style.marginBottom = '5px';
       rTitle.textContent = 'Son Aramalar:';
       recentDiv.appendChild(rTitle);
 
@@ -910,164 +625,6 @@
       });
     }
 
-    searchView.appendChild(input);
-    searchView.appendChild(catContainer);
-    searchView.appendChild(tabs);
-    searchView.appendChild(searchBtn);
-    if (recentSearches.length > 0) searchView.appendChild(recentDiv);
-
-    // ── SETTINGS VIEW ──
-    const settingsView = document.createElement('div');
-    settingsView.style.display = 'none';
-
-    // 1. Filtre Hassasiyeti
-    const sensRow = document.createElement('div');
-    sensRow.className = 'xlf-setting-row';
-    sensRow.style.borderColor = colors.border;
-    sensRow.innerHTML = `
-      <div>
-        <div class="xlf-setting-label" style="color:${colors.text}">Filtre Hassasiyeti</div>
-        <div class="xlf-setting-desc" style="color:${colors.textSecondary}">Canlı yayın puanlama eşiği</div>
-      </div>
-    `;
-    const sensSelect = document.createElement('select');
-    sensSelect.className = 'xlf-select';
-    sensSelect.style.backgroundColor = colors.inputBg;
-    sensSelect.style.color = colors.text;
-    sensSelect.style.borderColor = colors.border;
-    sensSelect.innerHTML = `
-      <option value="low" ${currentSettings.sensitivity === 'low' ? 'selected' : ''}>Düşük (Daha esnek)</option>
-      <option value="medium" ${currentSettings.sensitivity === 'medium' ? 'selected' : ''}>Orta (Önerilen)</option>
-      <option value="high" ${currentSettings.sensitivity === 'high' ? 'selected' : ''}>Yüksek (Sadece kesin)</option>
-    `;
-    sensSelect.addEventListener('change', () => {
-      currentSettings = saveSettings({ sensitivity: sensSelect.value });
-      if (isOurSearchPage()) filterTimelineTweets();
-    });
-    sensRow.appendChild(sensSelect);
-
-    // 2. Otomatik Yenileme
-    const refreshRow = document.createElement('div');
-    refreshRow.className = 'xlf-setting-row';
-    refreshRow.style.borderColor = colors.border;
-    refreshRow.innerHTML = `
-      <div>
-        <div class="xlf-setting-label" style="color:${colors.text}">Otomatik Yenileme</div>
-        <div class="xlf-setting-desc" style="color:${colors.textSecondary}">Yeni yayınları otomatik tara</div>
-      </div>
-    `;
-    const refreshSelect = document.createElement('select');
-    refreshSelect.className = 'xlf-select';
-    refreshSelect.style.backgroundColor = colors.inputBg;
-    refreshSelect.style.color = colors.text;
-    refreshSelect.style.borderColor = colors.border;
-    refreshSelect.innerHTML = `
-      <option value="0" ${currentSettings.autoRefresh === 0 ? 'selected' : ''}>Kapalı</option>
-      <option value="30" ${currentSettings.autoRefresh === 30 ? 'selected' : ''}>30 saniyede bir</option>
-      <option value="60" ${currentSettings.autoRefresh === 60 ? 'selected' : ''}>1 dakikada bir</option>
-      <option value="120" ${currentSettings.autoRefresh === 120 ? 'selected' : ''}>2 dakikada bir</option>
-    `;
-    refreshSelect.addEventListener('change', () => {
-      currentSettings = saveSettings({ autoRefresh: Number(refreshSelect.value) });
-      startAutoRefreshCycle();
-    });
-    refreshRow.appendChild(refreshSelect);
-
-    // 3. Masaüstü Bildirimleri
-    const notifRow = document.createElement('div');
-    notifRow.className = 'xlf-setting-row';
-    notifRow.style.borderColor = colors.border;
-    notifRow.innerHTML = `
-      <div>
-        <div class="xlf-setting-label" style="color:${colors.text}">Masaüstü Bildirimleri</div>
-        <div class="xlf-setting-desc" style="color:${colors.textSecondary}">Yeni canlı yayın başladığında bildir</div>
-      </div>
-    `;
-    const notifToggle = document.createElement('div');
-    notifToggle.className = `xlf-toggle ${currentSettings.desktopNotifications ? 'on' : ''}`;
-    notifToggle.innerHTML = '<div class="xlf-toggle-knob"></div>';
-    notifToggle.addEventListener('click', async () => {
-      const isCurrentlyOn = notifToggle.classList.contains('on');
-      if (!isCurrentlyOn) {
-        const granted = await requestNotificationPermission();
-        if (granted) {
-          notifToggle.classList.add('on');
-          currentSettings = saveSettings({ desktopNotifications: true });
-        }
-      } else {
-        notifToggle.classList.remove('on');
-        currentSettings = saveSettings({ desktopNotifications: false });
-      }
-    });
-    notifRow.appendChild(notifToggle);
-
-    // 4. Sesli Uyarılar
-    const soundRow = document.createElement('div');
-    soundRow.className = 'xlf-setting-row';
-    soundRow.style.borderColor = colors.border;
-    soundRow.innerHTML = `
-      <div>
-        <div class="xlf-setting-label" style="color:${colors.text}">Sesli Bildirim (Chime)</div>
-        <div class="xlf-setting-desc" style="color:${colors.textSecondary}">Yeni canlı yayın algılandığında ton çal</div>
-      </div>
-    `;
-    const soundToggle = document.createElement('div');
-    soundToggle.className = `xlf-toggle ${currentSettings.soundAlerts ? 'on' : ''}`;
-    soundToggle.innerHTML = '<div class="xlf-toggle-knob"></div>';
-    soundToggle.addEventListener('click', () => {
-      const isOn = soundToggle.classList.toggle('on');
-      currentSettings = saveSettings({ soundAlerts: isOn });
-      if (isOn) playAlertSound();
-    });
-    soundRow.appendChild(soundToggle);
-
-    // 5. Kart Vurgulama
-    const cardRow = document.createElement('div');
-    cardRow.className = 'xlf-setting-row';
-    cardRow.style.borderColor = colors.border;
-    cardRow.innerHTML = `
-      <div>
-        <div class="xlf-setting-label" style="color:${colors.text}">Canlı Kart Vurgusu</div>
-        <div class="xlf-setting-desc" style="color:${colors.textSecondary}">Tweet kartlarına neon canlı kenarlık ekle</div>
-      </div>
-    `;
-    const cardToggle = document.createElement('div');
-    cardToggle.className = `xlf-toggle ${currentSettings.highlightCards ? 'on' : ''}`;
-    cardToggle.innerHTML = '<div class="xlf-toggle-knob"></div>';
-    cardToggle.addEventListener('click', () => {
-      const isOn = cardToggle.classList.toggle('on');
-      currentSettings = saveSettings({ highlightCards: isOn });
-    });
-    cardRow.appendChild(cardToggle);
-
-    settingsView.appendChild(sensRow);
-    settingsView.appendChild(refreshRow);
-    settingsView.appendChild(notifRow);
-    settingsView.appendChild(soundRow);
-    settingsView.appendChild(cardRow);
-
-    const switchTab = (tabName) => {
-      if (tabName === 'search') {
-        searchNavTab.classList.add('active');
-        settingsNavTab.classList.remove('active');
-        searchView.style.display = 'block';
-        settingsView.style.display = 'none';
-        setTimeout(() => input.focus(), 50);
-      } else {
-        settingsNavTab.classList.add('active');
-        searchNavTab.classList.remove('active');
-        searchView.style.display = 'none';
-        settingsView.style.display = 'block';
-      }
-    };
-
-    searchNavTab.addEventListener('click', () => switchTab('search'));
-    settingsNavTab.addEventListener('click', () => switchTab('settings'));
-    switchTab(initialTab);
-
-    viewContainer.appendChild(searchView);
-    viewContainer.appendChild(settingsView);
-
     const closePopup = () => {
       overlay.style.animation = 'xlf-fadeOut 0.15s ease-in';
       setTimeout(() => overlay.remove(), 150);
@@ -1077,18 +634,20 @@
     overlay.addEventListener('click', (e) => { if (e.target === overlay) closePopup(); });
 
     card.appendChild(header);
-    card.appendChild(navTabs);
-    card.appendChild(viewContainer);
+    card.appendChild(input);
+    card.appendChild(catContainer);
+    card.appendChild(tabs);
+    card.appendChild(searchBtn);
+    if (recentSearches.length > 0) card.appendChild(recentDiv);
+
     overlay.appendChild(card);
     document.body.appendChild(overlay);
 
-    if (initialTab === 'search') {
-      setTimeout(() => { input.focus(); input.select(); }, 100);
-    }
+    setTimeout(() => { input.focus(); input.select(); }, 100);
   };
 
   // ─────────────────────────────────────────────
-  // 11. Sol Menü Enjeksiyonu
+  // 9. Sol Menü Enjeksiyonu
   // ─────────────────────────────────────────────
 
   const findNavMenu = () => {
@@ -1142,7 +701,7 @@
     clone.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      showSearchPopup('search');
+      showSearchPopup();
     });
 
     return clone;
@@ -1169,11 +728,11 @@
       referenceLink.after(liveButton);
     }
 
-    console.log('[X Canlı Yayın Filtresi] ✅ "Canlı Yayınlar" menüye eklendi.');
+    console.log('[X Canlı Yayın Filtresi] ✅ "Canlı Yayınlar" butonu menüye eklendi.');
   };
 
   // ─────────────────────────────────────────────
-  // 12. Gözlemciler & Yaşam Döngüsü
+  // 10. Gözlemciler & Yaşam Döngüsü
   // ─────────────────────────────────────────────
 
   const throttle = (fn, delay) => {
@@ -1204,7 +763,7 @@
     if (!isOurSearchPage()) return;
 
     filterTimelineTweets();
-    const throttledFilter = throttle(filterTimelineTweets, 200);
+    const throttledFilter = throttle(filterTimelineTweets, 150);
 
     timelineObserver = new MutationObserver(() => {
       throttledFilter();
@@ -1233,19 +792,14 @@
     const onNav = () => {
       throttledInject();
       setTimeout(() => {
-        liveTweetCount = 0;
-        previousLiveCount = 0;
         if (isOurSearchPage()) {
           startTimelineObserver();
-          showFilterBadge();
           startAutoRefreshCycle();
         } else {
-          const badge = document.querySelector('.xlf-filter-badge');
-          if (badge) badge.remove();
           if (timelineObserver) timelineObserver.disconnect();
           if (autoRefreshTimer) clearInterval(autoRefreshTimer);
         }
-      }, 1000);
+      }, 800);
     };
 
     history.pushState = (...args) => { origPush(...args); onNav(); };
@@ -1257,17 +811,17 @@
     document.addEventListener('keydown', (e) => {
       if (e.altKey && (e.key === 'l' || e.key === 'L')) {
         e.preventDefault();
-        showSearchPopup('search');
+        showSearchPopup();
       }
     });
   };
 
   // ─────────────────────────────────────────────
-  // 13. Başlatıcı (Entry Point)
+  // 11. Başlatıcı (Entry Point)
   // ─────────────────────────────────────────────
 
   const init = () => {
-    console.log('[X Canlı Yayın Filtresi] 🚀 v3.1.0 başlatılıyor...');
+    console.log('[X Canlı Yayın Filtresi] 🚀 v3.2.0 (Minimal & Sade) başlatılıyor...');
 
     interceptSPANavigation();
     injectLiveButton();
@@ -1281,12 +835,9 @@
     if (isOurSearchPage()) {
       setTimeout(() => {
         startTimelineObserver();
-        showFilterBadge();
         startAutoRefreshCycle();
-      }, 1200);
+      }, 1000);
     }
-
-    console.log('[X Canlı Yayın Filtresi] ✅ Hazır! Menü butonu veya Alt+L kısayolunu kullanın.');
   };
 
   if (document.readyState === 'loading') {
