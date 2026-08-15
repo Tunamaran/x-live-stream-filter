@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         X Canlı Yayın Filtresi
 // @namespace    https://github.com/tunamaran/x-live-stream-filter
-// @version      3.2.0
-// @description  X.com (Twitter) sol menüsüne sade ve şık "Canlı Yayınlar" butonu ekler. Kayıtlı video kliplerini engelleyip SADECE gerçek canlı yayınları ve Spaces odalarını sessizce ve temizce listeler.
+// @version      3.3.0
+// @description  X.com (Twitter) sol menüsüne sade ve şık "Canlı Yayınlar" butonu ekler. Fotoğraf, YouTube linki ve kayıtlı video kliplerini engelleyip SADECE gerçek canlı yayınları ve Spaces odalarını sessizce listeler.
 // @author       tunamaran
 // @match        https://x.com/*
 // @match        https://twitter.com/*
@@ -23,10 +23,9 @@
   const BUTTON_ID = 'data-x-live-filter';
   const POPUP_ID = 'data-x-live-popup';
   const FILTERED_ATTR = 'data-xlf-checked';
-  const THROTTLE_MS = 300;
+  const THROTTLE_MS = 250;
 
   const STORAGE_SEARCH_KEY = 'x-live-filter-last-search';
-  const STORAGE_SETTINGS_KEY = 'x-live-filter-settings';
 
   /** Canlı yayın arama sorgusu kalıbı */
   const LIVE_QUERY_PATTERN = '(CANLI OR LIVE OR "canlı yayın" OR "live stream" OR "live now" OR "yayında")';
@@ -40,32 +39,6 @@
     { name: '🎵 Müzik', query: 'konser OR akustik OR "canlı performans" OR dj' },
     { name: '🎙️ Spaces', query: 'spaces OR "sesli oda" OR "x spaces"' }
   ];
-
-  /** Varsayılan ayarlar */
-  const DEFAULT_SETTINGS = {
-    sensitivity: 'medium',      // 'low' | 'medium' | 'high'
-    autoRefresh: 30,             // 0 (kapalı), 30, 60 (saniye)
-    showLiveBadge: true          // Tweet üstünde sade "🔴 CANLI" etiketi göster
-  };
-
-  const loadSettings = () => {
-    try {
-      const data = localStorage.getItem(STORAGE_SETTINGS_KEY);
-      return data ? { ...DEFAULT_SETTINGS, ...JSON.parse(data) } : { ...DEFAULT_SETTINGS };
-    } catch {
-      return { ...DEFAULT_SETTINGS };
-    }
-  };
-
-  const saveSettings = (newSettings) => {
-    try {
-      const updated = { ...loadSettings(), ...newSettings };
-      localStorage.setItem(STORAGE_SETTINGS_KEY, JSON.stringify(updated));
-      return updated;
-    } catch {
-      return newSettings;
-    }
-  };
 
   // ─────────────────────────────────────────────
   // 2. Arama URL Oluşturucu
@@ -151,137 +124,111 @@
   };
 
   // ─────────────────────────────────────────────
-  // 4. Kesin Canlı Yayın Analiz & Filtre Motoru
+  // 4. Kesin Canlı Yayın Filtre Motoru (v3.3.0)
   // ─────────────────────────────────────────────
 
   /**
-   * Bir tweet'in GERÇEK bir canlı yayın / Spaces olup olmadığını analiz eder.
-   * Kayıtlı MP4 video kliplerini (0:13 gibi süresi olanlar) KESİNLİKLE eler.
+   * Bir tweet'in GERÇEK bir canlı yayın veya Spaces odası olup olmadığını kesin olarak doğrular.
+   * - Resim/Fotoğraf içeren tweet'leri KESİNLİKLE eler.
+   * - Dış bağlantı (YouTube linki, web sitesi vb.) içeren tweet'leri KESİNLİKLE eler.
+   * - Kayıtlı video kliplerini (0:13 gibi süresi olanlar) KESİNLİKLE eler.
+   * - Yalnızca X üzerinde aktif oynatılan Canlı Yayınları ve Spaces odalarını kabul eder.
    *
    * @param {HTMLElement} tweetEl
-   * @param {string} sensitivity - 'low' | 'medium' | 'high'
-   * @returns {boolean} Gerçek canlı yayın ise true
+   * @returns {boolean}
    */
-  const isRealLiveTweet = (tweetEl, sensitivity = 'medium') => {
-    // 1. Tweet metnini al (Kullanıcı adı/handle kısmını ÇIKAR)
-    const tweetTextEl = tweetEl.querySelector('[data-testid="tweetText"]');
-    const tweetText = tweetTextEl ? tweetTextEl.textContent.toLowerCase() : '';
-
-    const clone = tweetEl.cloneNode(true);
-    const userNameEl = clone.querySelector('[data-testid="User-Name"]');
-    if (userNameEl) userNameEl.remove();
-    const bodyContentText = (clone.textContent || '').toLowerCase();
-
-    // 2. Medya alanını tespit et
-    const mediaContainer = tweetEl.querySelector('[data-testid="videoPlayer"]') ||
-                           tweetEl.querySelector('[data-testid="videoComponent"]') ||
-                           tweetEl.querySelector('[data-testid="tweetPhoto"]') ||
-                           tweetEl;
-
-    // 3. KESİN REDDETME: Kayıtlı Video Süresi (Timecode) Tespiti
-    // Normal videolarda sol altta "0:13", "1:45", "12:00" gibi süre badge'i bulunur.
-    // Canlı yayınlarda ise video süresi YAZMAZ, yerine kırmızı "LIVE" veya izleyici sayısı yazar!
-    let hasRecordedDuration = false;
-
-    const durationBadgeCandidates = mediaContainer.querySelectorAll('div, span, time');
-    for (const el of durationBadgeCandidates) {
-      if (el.children.length === 0) {
-        const txt = el.textContent.trim();
-        if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(txt)) {
-          hasRecordedDuration = true;
-          break;
-        }
-      }
-    }
-
-    if (!hasRecordedDuration) {
-      const timeEls = mediaContainer.querySelectorAll('time, [aria-label*="duration"], [aria-label*="Süre"], [aria-label*="süre"]');
-      for (const tel of timeEls) {
-        const aria = tel.getAttribute('aria-label') || tel.textContent || '';
-        if (/\b\d{1,2}:\d{2}(:\d{2})?\b/.test(aria)) {
-          hasRecordedDuration = true;
-          break;
-        }
-      }
-    }
-
-    // 4. Kırmızı CANLI / LIVE Rozeti Tespiti
-    let hasRealLiveBadge = false;
-    for (const el of mediaContainer.querySelectorAll('*')) {
-      const txt = (el.textContent || '').trim().toUpperCase();
-      if (txt === 'LIVE' || txt === 'CANLI' || txt === 'YAYINDA' || txt.startsWith('LIVE ') || txt.startsWith('CANLI ')) {
-        const style = getComputedStyle(el);
-        const bg = style.backgroundColor || '';
-        if (bg.includes('rgb(244') || bg.includes('rgb(224') || bg.includes('rgb(234') || bg.includes('red') ||
-            el.closest('[style*="background-color: rgb(244"], [style*="background-color: rgb(224"]')) {
-          hasRealLiveBadge = true;
-          break;
-        }
-        if (!hasRecordedDuration && (txt === 'LIVE' || txt === 'CANLI')) {
-          hasRealLiveBadge = true;
-          break;
-        }
-      }
-    }
-
-    // 5. Spaces (Sesli Oda) & Broadcast Linki Tespiti
+  const isRealLiveTweet = (tweetEl) => {
+    // 1. SPACES (Sesli Oda) Kontrolü
     const hasAudioSpace = tweetEl.querySelector('[data-testid="audioSpaceCard"]') !== null ||
-                          tweetEl.querySelector('a[href*="/spaces/"]') !== null ||
-                          bodyContentText.includes('spaces') && tweetEl.querySelector('[data-testid="card.wrapper"]') !== null;
+                          tweetEl.querySelector('a[href*="twitter.com/i/spaces/"]') !== null ||
+                          tweetEl.querySelector('a[href*="x.com/i/spaces/"]') !== null;
+    if (hasAudioSpace) {
+      return true;
+    }
 
+    // 2. NATIVE BROADCAST PLAYER Kontrolü
     const hasBroadcastPlayer = tweetEl.querySelector('[data-testid="broadcastPlayer"]') !== null ||
                                tweetEl.querySelector('a[href*="/i/broadcasts/"]') !== null;
-
-    // ── KESİN KARARLAR ──
-
-    // Kural A: Kayıtlı video süresi (0:13) varsa ve Live badge'i yoksa -> ELENİR
-    if (hasRecordedDuration && !hasRealLiveBadge) {
-      return false;
-    }
-
-    // Kural B: Spaces odası veya Broadcast player varsa -> CANLI
-    if (hasAudioSpace || hasBroadcastPlayer) {
+    if (hasBroadcastPlayer) {
       return true;
     }
 
-    // Kural C: Video üzerinde gerçek kırmızı LIVE rozeti varsa -> CANLI
-    if (hasRealLiveBadge) {
-      return true;
-    }
+    // 3. VİDEO OYNATICI VARLIĞI KONTROLÜ
+    // Tweet'te doğrudan bir video oynatıcı yoksa (fotoğraf, YouTube link kartı veya salt metin ise) KESİNLİKLE CANLI DEĞİLDİR!
+    const videoEl = tweetEl.querySelector('video');
+    const videoContainer = tweetEl.querySelector('[data-testid="videoPlayer"]') ||
+                           tweetEl.querySelector('[data-testid="videoComponent"]');
 
-    // Kural D: Hiçbir video veya medya kartı yoksa -> ELENİR
-    const hasAnyVideo = tweetEl.querySelector('video') !== null ||
-                        tweetEl.querySelector('[data-testid="videoPlayer"]') !== null ||
-                        tweetEl.querySelector('[data-testid="card.wrapper"]') !== null;
-
-    if (!hasAnyVideo) {
+    if (!videoEl && !videoContainer) {
+      // Video oynatıcı yok -> Fotoğraf, YouTube linki veya metin -> KESİNLİKLE ELENİR!
       return false;
     }
 
-    // Kural E: Klip/gol/özet kelimeleri içeriyorsa -> ELENİR
-    const clipIndicators = ['gol |', 'goal |', 'anlık goller', 'anlık gol', 'özet |', 'highlights', 'from @'];
-    for (const ci of clipIndicators) {
-      if (bodyContentText.includes(ci)) {
+    const playerContainer = videoContainer || videoEl.closest('[data-testid="tweetPhoto"]') || videoEl.parentElement;
+    if (!playerContainer) {
+      return false;
+    }
+
+    // 4. KAYITLI VİDEO SÜRESİ (Timecode) KONTROLÜ
+    // Normal MP4 videolarda sol altta "0:13", "1:45", "10:20" gibi süre yazar.
+    // Canlı yayınlarda süre yazmaz!
+    const allTextNodes = playerContainer.querySelectorAll('div, span, time');
+    for (const node of allTextNodes) {
+      if (node.children.length === 0) {
+        const text = node.textContent.trim();
+        // 0:13, 01:45, 1:20:30 gibi timecode
+        if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(text)) {
+          // Süre bulundu -> Bu kayıtlı bir video klibidir -> KESİNLİKLE ELENİR!
+          return false;
+        }
+      }
+    }
+
+    // Aria-label duration kontrolü (örn: aria-label="0:13")
+    const durationAria = playerContainer.querySelector('[aria-label*="duration"], [aria-label*="Süre"], [aria-label*="süre"]');
+    if (durationAria) {
+      const val = durationAria.getAttribute('aria-label') || '';
+      if (/\b\d{1,2}:\d{2}\b/.test(val)) {
         return false;
       }
     }
 
-    // Kural F: Metin kontrolü (Süresiz video buffer'ları için)
-    let score = 0;
-    const liveKeywords = ['canlı yayın', 'live stream', 'live now', 'yayındayız', 'canlı izle', 'canlı maç yayını'];
-    for (const kw of liveKeywords) {
-      if (tweetText.includes(kw)) score += 35;
+    // 5. KIRMIZI CANLI / LIVE ROZETİ KONTROLÜ
+    // Video oynatıcı üzerinde kırmızı zeminli "LIVE" veya "CANLI" rozeti ara
+    let hasLiveBadge = false;
+    const playerElements = playerContainer.querySelectorAll('*');
+    for (const el of playerElements) {
+      const txt = (el.textContent || '').trim().toUpperCase();
+      if (txt === 'LIVE' || txt === 'CANLI' || txt.startsWith('LIVE ') || txt.startsWith('CANLI ')) {
+        const style = getComputedStyle(el);
+        const bg = style.backgroundColor || '';
+        if (bg.includes('rgb(244') || bg.includes('rgb(224') || bg.includes('rgb(234') || bg.includes('red')) {
+          hasLiveBadge = true;
+          break;
+        }
+        if (el.parentElement) {
+          const parentBg = getComputedStyle(el.parentElement).backgroundColor || '';
+          if (parentBg.includes('rgb(244') || parentBg.includes('rgb(224') || parentBg.includes('rgb(234') || parentBg.includes('red')) {
+            hasLiveBadge = true;
+            break;
+          }
+        }
+      }
     }
 
-    if (bodyContentText.includes('viewers') || bodyContentText.includes('watching') || bodyContentText.includes('izleyici')) {
-      score += 25;
+    if (hasLiveBadge) {
+      return true;
     }
 
-    let threshold = 40;
-    if (sensitivity === 'high') threshold = 55;
-    if (sensitivity === 'low') threshold = 25;
+    // 6. İZLEYİCİ SAYISI GÖSTERGESİ (Canlı Yayın Kontrolü)
+    const playerText = (playerContainer.textContent || '').toUpperCase();
+    if ((playerText.includes('VIEWS') || playerText.includes('İZLEYİCİ') || playerText.includes('WATCHING')) &&
+        (playerText.includes('LIVE') || playerText.includes('CANLI'))) {
+      return true;
+    }
 
-    return score >= threshold;
+    // Yukarıdaki şartları sağlamıyorsa canlı yayın değildir
+    return false;
   };
 
   // ─────────────────────────────────────────────
@@ -289,8 +236,6 @@
   // ─────────────────────────────────────────────
 
   const attachMinimalLiveTag = (tweetEl) => {
-    const settings = loadSettings();
-    if (!settings.showLiveBadge) return;
     if (tweetEl.querySelector('.xlf-live-tag')) return;
 
     const headerEl = tweetEl.querySelector('[data-testid="User-Name"]');
@@ -329,12 +274,11 @@
   const filterTimelineTweets = () => {
     if (!isOurSearchPage()) return;
 
-    const settings = loadSettings();
     const tweets = document.querySelectorAll(`article[data-testid="tweet"]:not([${FILTERED_ATTR}])`);
 
     tweets.forEach((tweet) => {
       tweet.setAttribute(FILTERED_ATTR, 'true');
-      const isLive = isRealLiveTweet(tweet, settings.sensitivity);
+      const isLive = isRealLiveTweet(tweet);
 
       const cellInner = tweet.closest('[data-testid="cellInnerDiv"]');
       const target = cellInner || tweet;
@@ -361,8 +305,6 @@
     }
 
     if (!isOurSearchPage()) return;
-    const settings = loadSettings();
-    if (!settings.autoRefresh || settings.autoRefresh <= 0) return;
 
     autoRefreshTimer = setInterval(() => {
       if (!isOurSearchPage()) {
@@ -370,7 +312,6 @@
         return;
       }
 
-      // X.com yeni tweetler hapı
       const newPostsPill = document.querySelector('[data-testid="pill-new-tweets"]') ||
                            document.querySelector('[role="button"][aria-label*="yeni"]');
       if (newPostsPill) {
@@ -378,11 +319,11 @@
       }
 
       filterTimelineTweets();
-    }, settings.autoRefresh * 1000);
+    }, 30000);
   };
 
   // ─────────────────────────────────────────────
-  // 8. Sade Arama & Ayarlar Popup UI
+  // 8. Sade Arama Popup UI
   // ─────────────────────────────────────────────
 
   const injectPopupStyles = () => {
@@ -821,7 +762,7 @@
   // ─────────────────────────────────────────────
 
   const init = () => {
-    console.log('[X Canlı Yayın Filtresi] 🚀 v3.2.0 (Minimal & Sade) başlatılıyor...');
+    console.log('[X Canlı Yayın Filtresi] 🚀 v3.3.0 başlatılıyor...');
 
     interceptSPANavigation();
     injectLiveButton();
@@ -836,7 +777,7 @@
       setTimeout(() => {
         startTimelineObserver();
         startAutoRefreshCycle();
-      }, 1000);
+      }, 800);
     }
   };
 
