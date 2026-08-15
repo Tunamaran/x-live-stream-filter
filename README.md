@@ -1,8 +1,8 @@
 # 🔴 X Canlı Yayın Filtresi
 
-**X.com (Twitter) üzerinde canlı yayınları ve Spaces odalarını tek tıkla bulun.**
+**X.com (Twitter) üzerinde canlı yayınları ve Spaces odalarını anahtar kelimeyle arayın.**
 
-Bu Tampermonkey userscript'i, X.com'un sol gezinme menüsüne **"Canlı Yayınlar"** butonu ekler. Butona tıkladığınızda X'in kendi arama altyapısını kullanarak tüm aktif canlı yayınları ve Spaces odalarını listeler.
+Bu Tampermonkey userscript'i, X.com'un sol gezinme menüsüne **"Canlı Yayınlar"** butonu ekler. Butona tıkladığınızda bir arama popup'ı açılır — anahtar kelimenizi girin (örn: **fenerbahçe**, **nba**, **galatasaray**) ve o konudaki canlı yayınları, Spaces odalarını ve güncel içerikleri anında bulun!
 
 ---
 
@@ -11,10 +11,24 @@ Bu Tampermonkey userscript'i, X.com'un sol gezinme menüsüne **"Canlı Yayınla
 | Özellik | Açıklama |
 |---------|----------|
 | 🎥 **Menü Entegrasyonu** | Sol navigasyon menüsüne doğal görünümlü "Canlı Yayınlar" butonu |
-| 🌗 **Dark/Light Mod** | X.com'un tema değişikliklerine otomatik uyum |
+| 🔍 **Arama Popup'ı** | Anahtar kelime girerek canlı yayınları ve Spaces'leri filtreleme |
+| 📋 **Güncel / Videolar** | Sonuçları "Güncel (Latest)" veya "Videolar" sekmesinde görüntüleme |
+| 🕐 **Son Aramalar** | Son 5 aramanız hatırlanır ve tek tıkla tekrarlanabilir |
+| 🌗 **Dark/Dim/Light Mod** | X.com'un 3 tema moduna otomatik uyum |
+| ⌨️ **Klavye Kısayolu** | `Alt+L` ile popup'ı her yerden açma |
 | 🔄 **SPA Desteği** | Sayfa yenilenmeden yapılan navigasyonlarda bile çalışır |
 | 🛡️ **React Re-render Koruması** | Buton DOM'dan silinse bile otomatik olarak yeniden eklenir |
 | 📡 **Otomatik Güncelleme** | GitHub üzerinden tek tıkla güncelleme desteği |
+
+---
+
+## 🎬 Nasıl Çalışır?
+
+1. **"Canlı Yayınlar"** butonuna tıklayın (veya `Alt+L` basın)
+2. Açılan popup'a anahtar kelime girin (örn: `fenerbahçe`)
+3. Sekme seçin: **Güncel (Latest)** veya **Videolar**
+4. **"Canlı Yayınları Ara"** butonuna tıklayın veya `Enter` basın
+5. X.com arama sonuçlarında canlı yayınları görün! 🎉
 
 ---
 
@@ -48,6 +62,16 @@ Eğer doğrudan bağlantı çalışmazsa:
 
 ---
 
+## ⌨️ Kısayollar
+
+| Kısayol | İşlev |
+|---------|-------|
+| `Alt+L` | Arama popup'ını aç |
+| `Enter` | Aramayı başlat |
+| `Escape` | Popup'ı kapat |
+
+---
+
 ## 🔄 Otomatik Güncelleme
 
 Script, Tampermonkey'in yerleşik güncelleme mekanizmasını kullanır:
@@ -60,33 +84,13 @@ Script, Tampermonkey'in yerleşik güncelleme mekanizmasını kullanır:
 
 ---
 
-## 🛠️ Nasıl Çalışır?
-
-```
-┌─────────────────────────────────────────┐
-│           Script Başlatma               │
-├─────────────────────────────────────────┤
-│                                         │
-│  1. SPA Navigasyon Dinleyicisi          │
-│     └─ pushState / popstate yakalama    │
-│                                         │
-│  2. İlk Enjeksiyon Denemesi            │
-│     └─ Nav menüsünü bul & buton ekle   │
-│                                         │
-│  3. MutationObserver (Throttled)        │
-│     └─ DOM değişikliklerini izle        │
-│                                         │
-│  4. Heartbeat (3s aralık)              │
-│     └─ Buton kaybolursa yeniden ekle    │
-│                                         │
-└─────────────────────────────────────────┘
-```
-
-### Teknik Detaylar
+## 🛠️ Teknik Detaylar
 
 - **Obfuscated CSS'e Bağımlılık Yok:** Element seçimi `aria-label`, `role`, `href` ve HTML yapısı üzerinden yapılır
 - **Performans Odaklı:** MutationObserver throttle mekanizmasıyla çalışır (500ms)
-- **Klonlama Stratejisi:** Mevcut menü öğeleri klonlanarak stil tutarlılığı sağlanır — X.com tema güncellemelerine otomatik uyum
+- **Klonlama Stratejisi:** Mevcut menü öğeleri klonlanarak stil tutarlılığı sağlanır
+- **Tema Algılama:** `document.body` background-color luminance analizi ile Dark/Dim/Light mod tespiti
+- **Son Aramalar:** localStorage ile son 5 arama hatırlanır
 
 ---
 
