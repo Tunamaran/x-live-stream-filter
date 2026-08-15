@@ -1,153 +1,90 @@
-# 🔴 X Canlı Yayın Filtresi
+# 🔴 X Canlı Yayın Filtresi (X Live Stream Filter)
 
-**X.com (Twitter) üzerinde canlı yayınları ve Spaces odalarını anahtar kelimeyle arayın.**
+**X.com (Twitter) üzerinde canlı yayınları, Spaces odalarını ve maç yayınlarını tek tıkla bulun.**
 
-Bu Tampermonkey userscript'i, X.com'un sol gezinme menüsüne **"Canlı Yayınlar"** butonu ekler. Butona tıkladığınızda bir arama popup'ı açılır — anahtar kelimenizi girin (örn: **fenerbahçe**, **nba**, **galatasaray**) ve o konudaki canlı yayınları, Spaces odalarını ve güncel içerikleri anında bulun!
+Bu Tampermonkey userscript'i, X.com'un sol menüsüne **"Canlı Yayınlar"** butonu ekler. Akıllı puanlama motoru, hazır kategori filtreleri, otomatik yenileme ve anlık masaüstü bildirimleriyle SADECE gerçek canlı yayınları önünüze getirir.
 
 ---
 
-## ✨ Özellikler
+## ✨ v3.0.0 Özellikleri
 
 | Özellik | Açıklama |
 |---------|----------|
 | 🎥 **Menü Entegrasyonu** | Sol navigasyon menüsüne doğal görünümlü "Canlı Yayınlar" butonu |
-| 🔍 **Arama Popup'ı** | Anahtar kelime girerek canlı yayınları ve Spaces'leri filtreleme |
-| 📋 **Güncel / Videolar** | Sonuçları "Güncel (Latest)" veya "Videolar" sekmesinde görüntüleme |
-| 🕐 **Son Aramalar** | Son 5 aramanız hatırlanır ve tek tıkla tekrarlanabilir |
-| 🌗 **Dark/Dim/Light Mod** | X.com'un 3 tema moduna otomatik uyum |
-| ⌨️ **Klavye Kısayolu** | `Alt+L` ile popup'ı her yerden açma |
-| 🔄 **SPA Desteği** | Sayfa yenilenmeden yapılan navigasyonlarda bile çalışır |
-| 🛡️ **React Re-render Koruması** | Buton DOM'dan silinse bile otomatik olarak yeniden eklenir |
-| 📡 **Otomatik Güncelleme** | GitHub üzerinden tek tıkla güncelleme desteği |
+| 🎯 **Akıllı Puanlama Filtresi** | Video/Spaces varlığı, kırmızı canlı rozetleri ve izleyici sayılarını analiz eden filtreleme |
+| ⚽ **Hızlı Kategoriler** | Futbol, Basketbol/NBA, Gaming, Gündem, Müzik ve Spaces için tek tıkla arama |
+| ⏱️ **Otomatik Yenileme** | 30s / 60s / 120s aralıklarla yeni yayınları arka planda otomatik arama |
+| 🔔 **Masaüstü & Sesli Bildirimler** | Yeni canlı yayın başladığında tarayıcı bildirimi ve hoş melodik ses (Chime) |
+| 🌟 **Zengin Canlı Kartlar** | Doğrulanan canlı yayın tweet'lerine neon kırmızı kenarlık ve puan etiketi |
+| ⚙️ **Dahili Ayarlar Paneli** | Filtre hassasiyeti, otomatik yenileme ve bildirimleri doğrudan popup'tan yönetme |
+| 🔢 **Canlı Sayaç Badge'i** | Sağ altta kaç adet canlı yayın bulunduğunu gösteren dinamik rozet |
+| 🌗 **Dark / Dim / Light Mod** | X.com'un 3 renk moduna tam uyum |
+| ⌨️ **Klavye Kısayolu** | `Alt + L` ile popup'ı her yerden anında açma |
 
 ---
 
-## 🎬 Nasıl Çalışır?
-
-1. **"Canlı Yayınlar"** butonuna tıklayın (veya `Alt+L` basın)
-2. Açılan popup'a anahtar kelime girin (örn: `fenerbahçe`)
-3. Sekme seçin: **Güncel (Latest)** veya **Videolar**
-4. **"Canlı Yayınları Ara"** butonuna tıklayın veya `Enter` basın
-5. X.com arama sonuçlarında canlı yayınları görün! 🎉
-
----
-
-## 📦 Kurulum
+## 🚀 Kurulum
 
 ### Gereksinimler
 
-- Bir modern tarayıcı (Chrome, Firefox, Edge, Safari)
+- Modern bir tarayıcı (Chrome, Firefox, Edge, Brave, Opera, Safari)
 - [Tampermonkey](https://www.tampermonkey.net/) eklentisi yüklü olmalı
 
 ### Adım Adım Kurulum
 
-1. **Tampermonkey'i yükleyin** — Tarayıcınızın eklenti mağazasından [Tampermonkey](https://www.tampermonkey.net/) eklentisini indirin.
+1. **Tampermonkey'i Yükleyin** — Tarayıcınızın eklenti mağazasından [Tampermonkey](https://www.tampermonkey.net/)'i kurun.
+2. **Script'i Yükleyin** — Aşağıdaki doğrudan yükleme bağlantısına tıklayın:
 
-2. **Script'i yükleyin** — Aşağıdaki bağlantıya tıklayın:
+   👉 **[Script'i Yükle / Güncelle (v3.0.0)](https://raw.githubusercontent.com/tunamaran/x-live-stream-filter/main/x-live-filter.user.js)**
 
-   👉 **[Script'i Yükle](https://raw.githubusercontent.com/tunamaran/x-live-stream-filter/main/x-live-filter.user.js)**
+   Tampermonkey ekranında **"Install" (Yükle)** butonuna tıklayın.
 
-   Tampermonkey otomatik olarak kurulum ekranını açacaktır. **"Install"** (Yükle) butonuna tıklayın.
-
-3. **X.com'u açın** — [x.com](https://x.com) adresine gidin. Sol menüde **"Canlı Yayınlar"** butonunu göreceksiniz! 🎉
-
-### Manuel Kurulum
-
-Eğer doğrudan bağlantı çalışmazsa:
-
-1. Tampermonkey simgesine tıklayın → **"Yeni script oluştur"**
-2. Editördeki varsayılan kodu silin
-3. [`x-live-filter.user.js`](x-live-filter.user.js) dosyasının içeriğini kopyalayıp yapıştırın
-4. `Ctrl+S` ile kaydedin
+3. **X.com'u Açın** — [x.com](https://x.com) adresine gidin. Sol menüdeki **"Canlı Yayınlar"** butonunu veya `Alt+L` kısayolunu kullanın! 🎉
 
 ---
 
-## ⌨️ Kısayollar
+## 🎬 Nasıl Kullanılır?
+
+1. Sol menüdeki **"Canlı Yayınlar"** butonuna tıklayın veya klavyeden `Alt + L` tuşlarına basın.
+2. Açılan pencerede:
+   - İster aramak istediğiniz kelimeleri yazın (örn: `fenerbahçe`, `galatasaray, beşiktaş`, `nba`).
+   - İsterseniz hazır kategori butonlarından birini seçin (⚽ Futbol, 🎮 Gaming vb.).
+3. **"Canlı Yayınları Filtrele & Ara"** butonuna basın.
+4. X.com akışında sadece canlı yayınlar listelenir.
+5. Yeni bir yayın başladığında script size masaüstü bildirimi gönderir ve melodik bir ses çalar!
+
+---
+
+## ⚙️ Ayarlar
+
+Arama popup'ındaki **"⚙️ Ayarlar & Filtre"** sekmesinden veya sağ alttaki canlı sayacına tıklayarak:
+
+- **Filtre Hassasiyeti:** Düşük, Orta (Önerilen), Yüksek
+- **Otomatik Yenileme:** Kapalı, 30s, 60s, 120s
+- **Masaüstü Bildirimleri:** Açık / Kapalı
+- **Sesli Bildirim (Chime):** Açık / Kapalı
+- **Canlı Kart Vurgusu:** Açık / Kapalı
+
+özelliklerini istediğiniz gibi özelleştirebilirsiniz.
+
+---
+
+## ⌨️ Klavye Kısayolları
 
 | Kısayol | İşlev |
 |---------|-------|
-| `Alt+L` | Arama popup'ını aç |
-| `Enter` | Aramayı başlat |
-| `Escape` | Popup'ı kapat |
+| `Alt + L` | Canlı Yayın Arama & Ayarlar Penceresini Aç |
+| `Enter` | Aramayı Başlat |
+| `Escape` | Pencereyi Kapat |
 
 ---
 
 ## 🔄 Otomatik Güncelleme
 
-Script, Tampermonkey'in yerleşik güncelleme mekanizmasını kullanır:
-
-- `@updateURL` ve `@downloadURL` meta etiketleri bu repository'nin `main` dalını işaret eder
-- Tampermonkey varsayılan olarak günlük güncelleme kontrolü yapar
-- **Manuel kontrol:** Tampermonkey → Kontrol Paneli → Script'e tıklayın → "Güncellemeleri kontrol et"
-
-> **Not:** Güncelleme sıklığını ayarlamak için: Tampermonkey → Ayarlar → "Güncellemeleri kontrol et" → İstediğiniz aralığı seçin.
-
----
-
-## 🛠️ Teknik Detaylar
-
-- **Obfuscated CSS'e Bağımlılık Yok:** Element seçimi `aria-label`, `role`, `href` ve HTML yapısı üzerinden yapılır
-- **Performans Odaklı:** MutationObserver throttle mekanizmasıyla çalışır (500ms)
-- **Klonlama Stratejisi:** Mevcut menü öğeleri klonlanarak stil tutarlılığı sağlanır
-- **Tema Algılama:** `document.body` background-color luminance analizi ile Dark/Dim/Light mod tespiti
-- **Son Aramalar:** localStorage ile son 5 arama hatırlanır
-
----
-
-## ❓ Sıkça Sorulan Sorular
-
-<details>
-<summary><b>Buton görünmüyor, ne yapmalıyım?</b></summary>
-
-1. Tampermonkey'in etkin olduğundan emin olun
-2. Script'in X.com için aktif olduğunu kontrol edin
-3. Sayfayı yenileyin (`F5`)
-4. Tarayıcı konsolunda (`F12`) hata mesajlarını kontrol edin
-
-</details>
-
-<details>
-<summary><b>X.com güncellendikten sonra çalışmayı durdurdu</b></summary>
-
-X.com DOM yapısını zaman zaman değiştirebilir. Bu durumda:
-1. Bu repository'de güncellenmiş bir sürüm olup olmadığını kontrol edin
-2. Hâlâ düzeltilmediyse bir [Issue](../../issues/new) açın
-
-</details>
-
-<details>
-<summary><b>Farklı bir dilde X.com kullanıyorum, çalışır mı?</b></summary>
-
-Evet! Script, dile bağımlı `aria-label` yerine `href` ve DOM yapısı kullanarak element bulur. Tüm dillerde çalışması hedeflenmiştir.
-
-</details>
-
----
-
-## 🤝 Katkıda Bulunma
-
-Katkılarınızı memnuniyetle karşılıyoruz!
-
-1. Bu repository'yi fork edin
-2. Feature branch oluşturun (`git checkout -b feature/harika-ozellik`)
-3. Değişikliklerinizi commit edin (`git commit -m 'feat: harika özellik eklendi'`)
-4. Branch'i push edin (`git push origin feature/harika-ozellik`)
-5. Pull Request açın
+Script `@updateURL` ve `@downloadURL` meta etiketlerini içerir. GitHub üzerinden yeni bir sürüm yayınlandığında Tampermonkey scriptinizi otomatik olarak günceller.
 
 ---
 
 ## 📄 Lisans
 
 Bu proje [MIT Lisansı](LICENSE) ile lisanslanmıştır.
-
----
-
-## ⭐ Beğendiyseniz
-
-Bu script işinize yaradıysa **yıldız ⭐** bırakmayı unutmayın! Bu, projenin daha fazla kişiye ulaşmasına yardımcı olur.
-
----
-
-<p align="center">
-  <sub>X.com üzerinde canlı içerikleri kaçırmayın 🔴</sub>
-</p>
