@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         X Canlı Yayın Filtresi
 // @namespace    https://github.com/tunamaran/x-live-stream-filter
-// @version      1.0.0
-// @description  X.com (Twitter) sol menüsüne "Canlı Yayınlar" butonu ekler. filter:live aramasıyla canlı yayınları ve Spaces odalarını kolayca bulmanızı sağlar.
+// @version      1.1.0
+// @description  X.com (Twitter) sol menüsüne "Canlı Yayınlar" butonu ekler. Tek tıkla canlı yayınları ve Spaces odalarını bulmanızı sağlar.
 // @author       tunamaran
 // @match        https://x.com/*
 // @match        https://twitter.com/*
@@ -20,8 +20,8 @@
   // Sabitler
   // ─────────────────────────────────────────────
 
-  /** Canlı yayın arama URL'si */
-  const LIVE_SEARCH_URL = '/search?q=filter%3Alive&src=typed_query&f=live';
+  /** Canlı yayın arama URL'si — "Latest" (Güncel) sekmesini açar */
+  const LIVE_SEARCH_URL = '/search?q=live+OR+canl%C4%B1+OR+spaces&src=typed_query&f=live';
 
   /** Butonumuzu tanımlayan benzersiz data attribute */
   const BUTTON_ID = 'data-x-live-filter';
@@ -157,24 +157,14 @@
       }
     });
 
-    // Tıklama davranışı — SPA navigasyonunu tetikle
+    // Tıklama davranışı — doğrudan navigasyon
     clone.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
 
-      // X.com SPA yönlendirmesi: history.pushState ile URL değiştir
-      // ve ardından popstate event'i tetikleyerek React router'ı haberdar et
-      window.history.pushState({}, '', LIVE_SEARCH_URL);
-      window.dispatchEvent(new PopStateEvent('popstate'));
-
-      // Bazı SPA'lar popstate yerine hashchange veya custom event dinler
-      // Güvenlik için location.assign ile de dene
-      setTimeout(() => {
-        // Eğer sayfa değişmediyse hard navigation yap
-        if (!window.location.pathname.startsWith('/search')) {
-          window.location.href = LIVE_SEARCH_URL;
-        }
-      }, 300);
+      // X.com React Router pushState ile güvenilir çalışmadığı için
+      // doğrudan location.href kullanıyoruz — en güvenilir yöntem
+      window.location.href = LIVE_SEARCH_URL;
     });
 
     return clone;
