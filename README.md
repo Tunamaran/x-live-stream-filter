@@ -1,41 +1,31 @@
 # 🔴 X Canlı Yayın Filtresi (X Live Stream Filter)
 
-**X.com (Twitter) üzerinde canlı yayınları, Spaces odalarını ve maç yayınlarını tek tıkla bulun.**
+**X.com (Twitter) üzerinde canlı yayınları ve Spaces odalarını sessizce, temizce ve tek tıkla bulun.**
 
-Bu Tampermonkey userscript'i, X.com'un sol menüsüne **"Canlı Yayınlar"** butonu ekler. Akıllı puanlama motoru, hazır kategori filtreleri, otomatik yenileme ve anlık masaüstü bildirimleriyle SADECE gerçek canlı yayınları önünüze getirir.
+Bu Tampermonkey userscript'i, X.com'un sol menüsüne doğal görünümlü **"Canlı Yayınlar"** butonu ekler. Kayıtlı video kliplerini ve yanıltıcı tweet'leri otomatik engelleyip SADECE gerçek canlı yayınları önünüze getirir.
 
 ---
 
-## ✨ v3.0.0 Özellikleri
+## ✨ Özellikler (v3.2.0 - Sade & Minimal)
 
 | Özellik | Açıklama |
 |---------|----------|
-| 🎥 **Menü Entegrasyonu** | Sol navigasyon menüsüne doğal görünümlü "Canlı Yayınlar" butonu |
-| 🎯 **Akıllı Puanlama Filtresi** | Video/Spaces varlığı, kırmızı canlı rozetleri ve izleyici sayılarını analiz eden filtreleme |
+| 🎥 **Doğal Menü Butonu** | Sol navigasyon menüsüne X.com tasarımına birebir uyumlu "Canlı Yayınlar" butonu |
+| 🛡️ **Kayıtlı Video Engelleme** | Süresi olan (0:13 gibi) MP4 klipleri ve gol videolarını kesin olarak eler |
 | ⚽ **Hızlı Kategoriler** | Futbol, Basketbol/NBA, Gaming, Gündem, Müzik ve Spaces için tek tıkla arama |
-| ⏱️ **Otomatik Yenileme** | 30s / 60s / 120s aralıklarla yeni yayınları arka planda otomatik arama |
-| 🔔 **Masaüstü & Sesli Bildirimler** | Yeni canlı yayın başladığında tarayıcı bildirimi ve hoş melodik ses (Chime) |
-| 🌟 **Zengin Canlı Kartlar** | Doğrulanan canlı yayın tweet'lerine neon kırmızı kenarlık ve puan etiketi |
-| ⚙️ **Dahili Ayarlar Paneli** | Filtre hassasiyeti, otomatik yenileme ve bildirimleri doğrudan popup'tan yönetme |
-| 🔢 **Canlı Sayaç Badge'i** | Sağ altta kaç adet canlı yayın bulunduğunu gösteren dinamik rozet |
-| 🌗 **Dark / Dim / Light Mod** | X.com'un 3 renk moduna tam uyum |
+| 🔇 **Sessiz & Temiz Deneyim** | Sesli uyarılar ve gereksiz banner'lar yok; akışınız tertemiz kalır |
+| 🏷️ **Sade Canlı Etiketi** | Doğrulanan canlı yayınların üstünde sadece şık bir `🔴 CANLI` rozeti yer alır |
+| 🌗 **Dark / Dim / Light Mod** | X.com'un temasına otomatik ve kusursuz uyum |
 | ⌨️ **Klavye Kısayolu** | `Alt + L` ile popup'ı her yerden anında açma |
 
 ---
 
 ## 🚀 Kurulum
 
-### Gereksinimler
-
-- Modern bir tarayıcı (Chrome, Firefox, Edge, Brave, Opera, Safari)
-- [Tampermonkey](https://www.tampermonkey.net/) eklentisi yüklü olmalı
-
-### Adım Adım Kurulum
-
 1. **Tampermonkey'i Yükleyin** — Tarayıcınızın eklenti mağazasından [Tampermonkey](https://www.tampermonkey.net/)'i kurun.
-2. **Script'i Yükleyin** — Aşağıdaki doğrudan yükleme bağlantısına tıklayın:
+2. **Script'i Yükleyin** — Aşağıdaki bağlantıya tıklayın:
 
-   👉 **[Script'i Yükle / Güncelle (v3.0.0)](https://raw.githubusercontent.com/tunamaran/x-live-stream-filter/main/x-live-filter.user.js)**
+   👉 **[Script'i Yükle / Güncelle (v3.2.0)](https://raw.githubusercontent.com/tunamaran/x-live-stream-filter/main/x-live-filter.user.js)**
 
    Tampermonkey ekranında **"Install" (Yükle)** butonuna tıklayın.
 
@@ -45,43 +35,20 @@ Bu Tampermonkey userscript'i, X.com'un sol menüsüne **"Canlı Yayınlar"** but
 
 ## 🎬 Nasıl Kullanılır?
 
-1. Sol menüdeki **"Canlı Yayınlar"** butonuna tıklayın veya klavyeden `Alt + L` tuşlarına basın.
-2. Açılan pencerede:
-   - İster aramak istediğiniz kelimeleri yazın (örn: `fenerbahçe`, `galatasaray, beşiktaş`, `nba`).
-   - İsterseniz hazır kategori butonlarından birini seçin (⚽ Futbol, 🎮 Gaming vb.).
-3. **"Canlı Yayınları Filtrele & Ara"** butonuna basın.
-4. X.com akışında sadece canlı yayınlar listelenir.
-5. Yeni bir yayın başladığında script size masaüstü bildirimi gönderir ve melodik bir ses çalar!
+1. Sol menüdeki **"Canlı Yayınlar"** butonuna tıklayın veya `Alt + L` tuşlarına basın.
+2. Konu yazın (örn: `fenerbahçe`) veya hazır kategorilerden birini seçin (⚽ Futbol, 🎮 Gaming vb.).
+3. **"Canlı Yayınları Bul"** butonuna basın.
+4. Akışta yalnızca canlı yayınlar ve Spaces odaları listelenir.
 
 ---
 
-## ⚙️ Ayarlar
-
-Arama popup'ındaki **"⚙️ Ayarlar & Filtre"** sekmesinden veya sağ alttaki canlı sayacına tıklayarak:
-
-- **Filtre Hassasiyeti:** Düşük, Orta (Önerilen), Yüksek
-- **Otomatik Yenileme:** Kapalı, 30s, 60s, 120s
-- **Masaüstü Bildirimleri:** Açık / Kapalı
-- **Sesli Bildirim (Chime):** Açık / Kapalı
-- **Canlı Kart Vurgusu:** Açık / Kapalı
-
-özelliklerini istediğiniz gibi özelleştirebilirsiniz.
-
----
-
-## ⌨️ Klavye Kısayolları
+## ⌨️ Kısayollar
 
 | Kısayol | İşlev |
 |---------|-------|
-| `Alt + L` | Canlı Yayın Arama & Ayarlar Penceresini Aç |
+| `Alt + L` | Canlı Yayın Arama Penceresini Aç |
 | `Enter` | Aramayı Başlat |
 | `Escape` | Pencereyi Kapat |
-
----
-
-## 🔄 Otomatik Güncelleme
-
-Script `@updateURL` ve `@downloadURL` meta etiketlerini içerir. GitHub üzerinden yeni bir sürüm yayınlandığında Tampermonkey scriptinizi otomatik olarak günceller.
 
 ---
 
