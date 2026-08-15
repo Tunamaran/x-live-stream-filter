@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         X Canlı Yayın Filtresi
 // @namespace    https://github.com/tunamaran/x-live-stream-filter
-// @version      3.0.0
-// @description  X.com (Twitter) sol menüsüne "Canlı Yayınlar" butonu ekler. Akıllı puanlama, otomatik yenileme, masaüstü bildirimleri, zengin kartlar ve kategori filtreleriyle SADECE canlı yayınları bulmanızı sağlar.
+// @version      3.1.0
+// @description  X.com (Twitter) sol menüsüne "Canlı Yayınlar" butonu ekler. Kayıtlı video ve gol kliplerini engelleyip SADECE gerçek canlı yayın ve Spaces odalarını gösterir.
 // @author       tunamaran
 // @match        https://x.com/*
 // @match        https://twitter.com/*
@@ -24,7 +24,7 @@
   const POPUP_ID = 'data-x-live-popup';
   const FILTERED_ATTR = 'data-xlf-checked';
   const LIVE_CARD_ATTR = 'data-xlf-live-card';
-  const THROTTLE_MS = 400;
+  const THROTTLE_MS = 350;
 
   const STORAGE_SEARCH_KEY = 'x-live-filter-last-search';
   const STORAGE_SETTINGS_KEY = 'x-live-filter-settings';
@@ -52,9 +52,6 @@
     customKeywords: ['maç izle', 'canlı izle', 'yayındayız', 'canlı maç']
   };
 
-  /**
-   * Ayarları localStorage'dan okur veya varsayılanları döndürür.
-   */
   const loadSettings = () => {
     try {
       const data = localStorage.getItem(STORAGE_SETTINGS_KEY);
@@ -64,9 +61,6 @@
     }
   };
 
-  /**
-   * Ayarları günceller ve kaydeder.
-   */
   const saveSettings = (newSettings) => {
     try {
       const updated = { ...loadSettings(), ...newSettings };
@@ -81,9 +75,6 @@
   // 2. Web Audio API — Bildirim Sesi (Synthesizer)
   // ─────────────────────────────────────────────
 
-  /**
-   * Harici ses dosyasına ihtiyaç duymadan saf Web Audio API ile melodik uyarı sesi üretir.
-   */
   const playAlertSound = () => {
     const settings = loadSettings();
     if (!settings.soundAlerts) return;
@@ -98,7 +89,6 @@
       const gain = ctx.createGain();
 
       osc.type = 'sine';
-      // 2 tonlu canlı yayın bildirimi: 587.33Hz (D5) -> 880Hz (A5)
       osc.frequency.setValueAtTime(587.33, now);
       osc.frequency.exponentialRampToValueAtTime(880, now + 0.12);
 
@@ -111,7 +101,7 @@
       osc.start(now);
       osc.stop(now + 0.36);
     } catch {
-      // Ses engeli veya tarayıcı kısıtı
+      // Ses engeli
     }
   };
 
@@ -149,18 +139,14 @@
         };
       }
     } catch {
-      // Bildirim gönderilemedi
+      // Ignore
     }
   };
 
   // ─────────────────────────────────────────────
-  // 4. Arama URL Oluşturucu (Çoklu Kelime & Kategori)
+  // 4. Arama URL Oluşturucu
   // ─────────────────────────────────────────────
 
-  /**
-   * Virgülle ayrılmış veya çoklu kelimeleri akıllı OR sorgusuna dönüştürür.
-   * Örnek: "fenerbahçe, galatasaray" -> (fenerbahçe OR galatasaray) (CANLI OR LIVE...)
-   */
   const buildSearchURL = (rawKeyword, tab = 'live') => {
     let clean = rawKeyword.trim();
     if (!clean) clean = 'canlı yayın';
@@ -243,105 +229,175 @@
   };
 
   // ─────────────────────────────────────────────
-  // 6. Gelişmiş Filtre Puanlama Sistemi (Scoring)
+  // 6. Kesin Canlı Yayın Analiz & Puanlama Motoru (v3.1.0)
   // ─────────────────────────────────────────────
 
   /**
-   * Bir tweet'in canlı yayın olup olmadığını puanlayarak doğrular.
+   * Bir tweet'in GERÇEK bir canlı yayın / Spaces olup olmadığını analiz eder.
+   * Kayıtlı MP4 video kliplerini (0:13 gibi süresi olanlar) KESİNLİKLE eler.
+   *
    * @param {HTMLElement} tweetEl
    * @param {string} sensitivity - 'low' | 'medium' | 'high'
    * @returns {{ isLive: boolean, score: number, details: string }}
    */
   const evaluateTweetLiveScore = (tweetEl, sensitivity = 'medium') => {
-    let score = 0;
-    const details = [];
-    const fullText = (tweetEl.textContent || '').toLowerCase();
-    const settings = loadSettings();
+    // 1. Tweet metnini al (Kullanıcı adı/handle kısmını ÇIKAR - false positive önleme)
+    const tweetTextEl = tweetEl.querySelector('[data-testid="tweetText"]');
+    const tweetText = tweetTextEl ? tweetTextEl.textContent.toLowerCase() : '';
 
-    // 1. Video / Broadcast / Spaces Medya Kontrolü (+30 puan)
-    const hasVideo = tweetEl.querySelector('video') !== null;
-    const hasAudioSpace = tweetEl.querySelector('[data-testid="audioSpaceCard"]') !== null ||
-                          fullText.includes('spaces') || fullText.includes('sesli oda');
-    const hasBroadcastCard = tweetEl.querySelector('[data-testid="card.wrapper"]') !== null;
+    const clone = tweetEl.cloneNode(true);
+    const userNameEl = clone.querySelector('[data-testid="User-Name"]');
+    if (userNameEl) userNameEl.remove();
+    const bodyContentText = (clone.textContent || '').toLowerCase();
 
-    if (hasVideo) {
-      score += 30;
-      details.push('video');
-    }
-    if (hasAudioSpace) {
-      score += 35;
-      details.push('spaces');
-    }
-    if (hasBroadcastCard) {
-      score += 15;
-      details.push('broadcast-card');
-    }
+    // 2. Medya alanını tespit et
+    const mediaContainer = tweetEl.querySelector('[data-testid="videoPlayer"]') ||
+                           tweetEl.querySelector('[data-testid="videoComponent"]') ||
+                           tweetEl.querySelector('[data-testid="tweetPhoto"]') ||
+                           tweetEl;
 
-    // 2. Kırmızı LIVE / CANLI Badge Kontrolü (+40 puan)
-    let hasRedBadge = false;
-    const allDescendants = tweetEl.querySelectorAll('*');
-    for (const el of allDescendants) {
-      const txt = (el.textContent || '').trim().toUpperCase();
-      if (txt === 'LIVE' || txt === 'CANLI' || txt === 'YAYINDA') {
-        const style = getComputedStyle(el);
-        const bg = style.backgroundColor;
-        if (bg.includes('rgb(244') || bg.includes('rgb(224') || bg.includes('rgb(234') || bg.includes('red')) {
-          hasRedBadge = true;
+    // 3. KESİN REDDETME: Kayıtlı Video Süresi (Timecode) Tespiti
+    // Normal videolarda sol altta "0:13", "1:45", "12:00" gibi süre badge'i bulunur.
+    // Canlı yayınlarda ise video süresi YAZMAZ, yerine kırmızı "LIVE" veya izleyici sayısı yazar!
+    let hasRecordedDuration = false;
+    let durationText = '';
+
+    const durationBadgeCandidates = mediaContainer.querySelectorAll('div, span, time');
+    for (const el of durationBadgeCandidates) {
+      if (el.children.length === 0) {
+        const txt = el.textContent.trim();
+        // 0:13 veya 1:45 veya 10:20 formatı
+        if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(txt)) {
+          hasRecordedDuration = true;
+          durationText = txt;
           break;
         }
       }
     }
-    if (hasRedBadge) {
-      score += 40;
-      details.push('red-badge');
+
+    // Ekstra duration kontrolü (aria-label="0:13" veya time etiketi)
+    if (!hasRecordedDuration) {
+      const timeEls = mediaContainer.querySelectorAll('time, [aria-label*="duration"], [aria-label*="Süre"], [aria-label*="süre"]');
+      for (const tel of timeEls) {
+        const aria = tel.getAttribute('aria-label') || tel.textContent || '';
+        if (/\b\d{1,2}:\d{2}(:\d{2})?\b/.test(aria)) {
+          hasRecordedDuration = true;
+          durationText = aria;
+          break;
+        }
+      }
     }
 
-    // 3. Canlı Metin Göstergeleri (+25 puan)
-    const liveWords = ['live', 'canlı', 'canlı yayın', 'live stream', 'live now', 'yayında', 'canli'];
-    const matchedWords = liveWords.filter(w => fullText.includes(w));
-    if (matchedWords.length > 0) {
-      score += Math.min(matchedWords.length * 15, 30);
-      details.push(`words(${matchedWords.join(',')})`);
+    // 4. Kırmızı CANLI / LIVE Rozeti Tespiti
+    let hasRealLiveBadge = false;
+    for (const el of mediaContainer.querySelectorAll('*')) {
+      const txt = (el.textContent || '').trim().toUpperCase();
+      if (txt === 'LIVE' || txt === 'CANLI' || txt === 'YAYINDA' || txt.startsWith('LIVE ') || txt.startsWith('CANLI ')) {
+        const style = getComputedStyle(el);
+        const bg = style.backgroundColor || '';
+        if (bg.includes('rgb(244') || bg.includes('rgb(224') || bg.includes('rgb(234') || bg.includes('red') ||
+            el.closest('[style*="background-color: rgb(244"], [style*="background-color: rgb(224"]')) {
+          hasRealLiveBadge = true;
+          break;
+        }
+        if (!hasRecordedDuration && (txt === 'LIVE' || txt === 'CANLI')) {
+          hasRealLiveBadge = true;
+          break;
+        }
+      }
     }
 
-    // 4. İzleyici Sayısı Göstergeleri (+20 puan)
-    if (fullText.includes('viewers') || fullText.includes('watching') ||
-        fullText.includes('izleyici') || fullText.includes('izleniyor') ||
-        /\d+(\.\d+)?[kK]?\s+(views|izlenme|izleyici|viewers)/.test(fullText)) {
-      score += 20;
+    // 5. Spaces (Sesli Oda) & Broadcast Linki Tespiti
+    const hasAudioSpace = tweetEl.querySelector('[data-testid="audioSpaceCard"]') !== null ||
+                          tweetEl.querySelector('a[href*="/spaces/"]') !== null ||
+                          bodyContentText.includes('spaces') && tweetEl.querySelector('[data-testid="card.wrapper"]') !== null;
+
+    const hasBroadcastPlayer = tweetEl.querySelector('[data-testid="broadcastPlayer"]') !== null ||
+                               tweetEl.querySelector('a[href*="/i/broadcasts/"]') !== null;
+
+    // ─────────────────────────────────────────────
+    // FİLTRELEME VE KARAR VERME KURALLARI
+    // ─────────────────────────────────────────────
+
+    // KURAL A: Süresi olan (0:13 gibi) ve gerçek Live badge'i OLMAYAN videolar KESİNLİKLE CANLI DEĞİLDİR!
+    if (hasRecordedDuration && !hasRealLiveBadge) {
+      return {
+        isLive: false,
+        score: -100,
+        details: `rejected-video-duration(${durationText})`
+      };
+    }
+
+    // KURAL B: Spaces odası veya doğrudan Broadcast Player varsa KESİNLİKLE CANLIDIR!
+    if (hasAudioSpace || hasBroadcastPlayer) {
+      return {
+        isLive: true,
+        score: 95,
+        details: hasAudioSpace ? 'verified-spaces-room' : 'verified-broadcast-player'
+      };
+    }
+
+    // KURAL C: Video üzerinde gerçek kırmızı LIVE / CANLI rozeti varsa KESİNLİKLE CANLIDIR!
+    if (hasRealLiveBadge) {
+      return {
+        isLive: true,
+        score: 90,
+        details: 'verified-live-badge'
+      };
+    }
+
+    // KURAL D: Tweet içerisinde hiçbir video veya kart yoksa CANLI DEĞİLDİR!
+    const hasAnyVideo = tweetEl.querySelector('video') !== null ||
+                        tweetEl.querySelector('[data-testid="videoPlayer"]') !== null ||
+                        tweetEl.querySelector('[data-testid="card.wrapper"]') !== null;
+
+    if (!hasAnyVideo) {
+      return {
+        isLive: false,
+        score: 0,
+        details: 'no-media'
+      };
+    }
+
+    // KURAL E: Video var ama süresi tespit edilemedi (Stream buffer) -> Sıkı metin analizi
+    let score = 0;
+    const details = [];
+
+    // Klip / Gol / Özet kelimeleri varsa ceza ver (Kayıtlı video indikatörü)
+    const clipIndicators = ['gol |', 'goal |', 'anlık goller', 'anlık gol', 'özet |', 'highlights', 'from @'];
+    for (const ci of clipIndicators) {
+      if (bodyContentText.includes(ci)) {
+        return {
+          isLive: false,
+          score: -50,
+          details: `rejected-clip-word(${ci})`
+        };
+      }
+    }
+
+    // Canlı yayın anahtar kelimeleri
+    const liveKeywords = ['canlı yayın', 'live stream', 'live now', 'yayındayız', 'canlı izle', 'canlı maç yayını'];
+    for (const kw of liveKeywords) {
+      if (tweetText.includes(kw)) {
+        score += 35;
+        details.push(`kw(${kw})`);
+      }
+    }
+
+    // İzleyici sayısı göstergesi
+    if (bodyContentText.includes('viewers') || bodyContentText.includes('watching') || bodyContentText.includes('izleyici')) {
+      score += 25;
       details.push('viewers');
     }
 
-    // 5. Kullanıcı Özel Anahtar Kelimeleri (+20 puan)
-    if (settings.customKeywords && Array.isArray(settings.customKeywords)) {
-      for (const kw of settings.customKeywords) {
-        if (kw && fullText.includes(kw.toLowerCase())) {
-          score += 20;
-          details.push(`custom(${kw})`);
-          break;
-        }
-      }
-    }
-
-    // 6. Eski / Tekrar Yayın Cezası (-30 puan)
-    const pastWords = ['dün', 'yesterday', 'özet', 'highlights', 'replay', 'kayıt', 'tekrar'];
-    for (const pw of pastWords) {
-      if (fullText.includes(pw) && !hasRedBadge) {
-        score -= 25;
-        details.push(`past(-${pw})`);
-        break;
-      }
-    }
-
-    // Hassasiyete göre eşik puanı
-    let threshold = 30; // medium
-    if (sensitivity === 'high') threshold = 50; // strict
-    if (sensitivity === 'low') threshold = 15;  // permissive
+    let threshold = 40; // medium
+    if (sensitivity === 'high') threshold = 55;
+    if (sensitivity === 'low') threshold = 25;
 
     return {
       isLive: score >= threshold,
       score,
-      details: details.join(' | ')
+      details: details.join(' | ') || 'fallback-check'
     };
   };
 
@@ -357,12 +413,10 @@
     tweetEl.setAttribute(LIVE_CARD_ATTR, 'true');
     const colors = getThemeColors();
 
-    // Sol kenarda neon canlı yayın vurgusu
     tweetEl.style.transition = 'border-left 0.2s, box-shadow 0.2s';
     tweetEl.style.borderLeft = `4px solid ${colors.liveRed}`;
     tweetEl.style.boxShadow = `inset 4px 0 12px -2px ${colors.liveRedBg}`;
 
-    // Üst tarafa canlı yayın etiketi rozeti ekle
     const headerEl = tweetEl.querySelector('[data-testid="User-Name"]') || tweetEl.querySelector('div');
     if (headerEl && !tweetEl.querySelector('.xlf-live-tag')) {
       const tag = document.createElement('span');
@@ -443,7 +497,6 @@
     if (newlyDiscoveredLive > 0) {
       updateCounterBadge();
 
-      // Sayfa açıkken yeni canlı yayın düştüğünde ses ve bildirim
       if (previousLiveCount > 0 && newlyDiscoveredLive > 0) {
         playAlertSound();
         sendDesktopNotification(
@@ -457,9 +510,6 @@
     }
   };
 
-  /**
-   * Timeline tepesinde yeni canlı yayın uyarısı banner'ı gösterir.
-   */
   const showNewLiveAlertBanner = (newCount) => {
     if (document.querySelector('.xlf-new-banner')) return;
 
@@ -505,7 +555,7 @@
   };
 
   // ─────────────────────────────────────────────
-  // 9. Otomatik Yenileme Döngüsü (Auto-Refresh)
+  // 9. Otomatik Yenileme Döngüsü
   // ─────────────────────────────────────────────
 
   let autoRefreshTimer = null;
@@ -526,14 +576,12 @@
         return;
       }
 
-      // X.com'daki "Yeni gönderileri göster" butonunu otomatik tıkla
       const newPostsPill = document.querySelector('[data-testid="pill-new-tweets"]') ||
                            document.querySelector('[role="button"][aria-label*="yeni"]');
       if (newPostsPill) {
         newPostsPill.click();
       }
 
-      // DOM filtreyi tekrar çalıştır
       filterTimelineTweets();
     }, settings.autoRefresh * 1000);
 
@@ -541,7 +589,7 @@
   };
 
   // ─────────────────────────────────────────────
-  // 10. Arama & Ayarlar Popup UI (v3.0.0)
+  // 10. Arama & Ayarlar Popup UI
   // ─────────────────────────────────────────────
 
   const injectPopupStyles = () => {
@@ -667,9 +715,6 @@
     } catch { /* ignore */ }
   };
 
-  /**
-   * Sağ alttaki canlı filtre gösterge badge'i
-   */
   const showFilterBadge = () => {
     if (document.querySelector('.xlf-filter-badge')) return;
 
@@ -690,9 +735,6 @@
     document.body.appendChild(badge);
   };
 
-  /**
-   * Arama ve Ayarlar modal popup'ını gösterir.
-   */
   const showSearchPopup = (initialTab = 'search') => {
     if (document.querySelector(`[${POPUP_ID}]`)) return;
 
@@ -728,7 +770,7 @@
     header.appendChild(title);
     header.appendChild(closeBtn);
 
-    // Nav Tabs (Ara vs Ayarlar)
+    // Nav Tabs
     const navTabs = document.createElement('div');
     navTabs.className = 'xlf-nav-tabs';
     navTabs.style.borderColor = colors.border;
@@ -746,7 +788,6 @@
     navTabs.appendChild(searchNavTab);
     navTabs.appendChild(settingsNavTab);
 
-    // Container for Views
     const viewContainer = document.createElement('div');
 
     // ── SEARCH VIEW ──
@@ -760,7 +801,6 @@
     input.style.color = colors.text;
     if (recentSearches.length > 0) input.value = recentSearches[0];
 
-    // Hızlı Kategori Chip'leri
     const catContainer = document.createElement('div');
     catContainer.className = 'xlf-categories';
 
@@ -780,7 +820,6 @@
       catContainer.appendChild(chip);
     });
 
-    // Sekmeler (Güncel vs Videolar)
     let selectedTab = 'live';
     const tabs = document.createElement('div');
     tabs.className = 'xlf-tabs';
@@ -816,7 +855,6 @@
     tabs.appendChild(createTab('📋 Güncel (Latest)', 'live', true));
     tabs.appendChild(createTab('🎥 Videolar', 'video'));
 
-    // Arama butonu
     const searchBtn = document.createElement('button');
     searchBtn.className = 'xlf-search-btn';
     searchBtn.textContent = '🔴 Canlı Yayınları Filtrele & Ara';
@@ -843,7 +881,6 @@
 
     searchBtn.addEventListener('click', doSearch);
 
-    // Son aramalar
     const recentDiv = document.createElement('div');
     if (recentSearches.length > 0) {
       recentDiv.style.marginTop = '14px';
@@ -899,7 +936,7 @@
     sensSelect.style.color = colors.text;
     sensSelect.style.borderColor = colors.border;
     sensSelect.innerHTML = `
-      <option value="low" ${currentSettings.sensitivity === 'low' ? 'selected' : ''}>Düşük (Daha çok sonuç)</option>
+      <option value="low" ${currentSettings.sensitivity === 'low' ? 'selected' : ''}>Düşük (Daha esnek)</option>
       <option value="medium" ${currentSettings.sensitivity === 'medium' ? 'selected' : ''}>Orta (Önerilen)</option>
       <option value="high" ${currentSettings.sensitivity === 'high' ? 'selected' : ''}>Yüksek (Sadece kesin)</option>
     `;
@@ -984,7 +1021,7 @@
     });
     soundRow.appendChild(soundToggle);
 
-    // 5. Kart Vurgulama (Neon Live Highlighting)
+    // 5. Kart Vurgulama
     const cardRow = document.createElement('div');
     cardRow.className = 'xlf-setting-row';
     cardRow.style.borderColor = colors.border;
@@ -1009,7 +1046,6 @@
     settingsView.appendChild(soundRow);
     settingsView.appendChild(cardRow);
 
-    // Tab Switching Logic
     const switchTab = (tabName) => {
       if (tabName === 'search') {
         searchNavTab.classList.add('active');
@@ -1070,7 +1106,6 @@
     clone.setAttribute('href', '#');
     clone.setAttribute('aria-label', 'Canlı Yayınlar');
 
-    // SVG ikon değiştir
     const existingSvg = clone.querySelector('svg');
     if (existingSvg) {
       const newIcon = getLiveIcon();
@@ -1079,7 +1114,6 @@
       existingSvg.parentNode.replaceChild(newIcon, existingSvg);
     }
 
-    // Metin güncelle
     const spans = clone.querySelectorAll('span');
     let textUpdated = false;
     for (const span of spans) {
@@ -1097,7 +1131,6 @@
       }
     }
 
-    // Aktif vurguyu kaldır
     clone.removeAttribute('aria-current');
     clone.querySelectorAll('[aria-current]').forEach(el => el.removeAttribute('aria-current'));
     clone.querySelectorAll('span').forEach(span => {
@@ -1171,7 +1204,7 @@
     if (!isOurSearchPage()) return;
 
     filterTimelineTweets();
-    const throttledFilter = throttle(filterTimelineTweets, 250);
+    const throttledFilter = throttle(filterTimelineTweets, 200);
 
     timelineObserver = new MutationObserver(() => {
       throttledFilter();
@@ -1234,7 +1267,7 @@
   // ─────────────────────────────────────────────
 
   const init = () => {
-    console.log('[X Canlı Yayın Filtresi] 🚀 v3.0.0 başlatılıyor...');
+    console.log('[X Canlı Yayın Filtresi] 🚀 v3.1.0 başlatılıyor...');
 
     interceptSPANavigation();
     injectLiveButton();
